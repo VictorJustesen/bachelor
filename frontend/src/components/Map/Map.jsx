@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
@@ -6,7 +6,21 @@ function Map({ params, markers = [], onMapLoad }) {
   const mapRef = useRef()
   const mapContainerRef = useRef()
   const spinRef = useRef()
+  const decayTimerRef = useRef(null)
   const markersRef = useRef([])
+  
+  // Use React state for values we want to trigger re-renders
+  const [spinSpeed, setSpinSpeed] = useState(8) // Default spin speed in degrees per second
+  
+  // Use refs for values that don't need to trigger re-renders
+  const spinStateRef = useRef({
+    isSpinning: false,
+    direction: 1, // 1 for clockwise, -1 for counter-clockwise
+    lastDragPosition: null,
+    dragStarted: false,
+    lastDragTime: null,
+    decayRate: 0.95 // Speed will decrease by 5% every decay interval
+  })
 
   useEffect(() => {
     mapboxgl.accessToken = 'pk.eyJ1IjoiZ2luZ2VybG9yZCIsImEiOiJjbWFzMTRremowYjNpMmxzaG05bG1pajA1In0.stYxpVfJdphbhzGq1c0Xlw'
@@ -129,23 +143,187 @@ function Map({ params, markers = [], onMapLoad }) {
     }
   }, [])
 
-  // Smooth spinning using Mapbox's rotateTo
+  // Smooth spinning using Mapbox's rotateTo with drag direction control
   useEffect(() => {
     if (!mapRef.current) return
+    const map = mapRef.current
+    
+    // Function to handle speed decay
+    function startSpeedDecay() {
+      // Clear any existing decay timer
+      if (decayTimerRef.current) {
+        clearInterval(decayTimerRef.current);
+      }
+      
+      // Set up decay timer - runs every 100ms
+      decayTimerRef.current = setInterval(() => {
+        // Only decay if we're above minimum speed
+        if (Math.abs(spinSpeed) > 8) {
+          // Apply decay to current speed
+          setSpinSpeed(prevSpeed => {
+            const decayedSpeed = prevSpeed * spinStateRef.current.decayRate;
+            
+            // If speed is very low, reset to minimum in the current direction
+            if (Math.abs(decayedSpeed) < 0.5) {
+              return spinStateRef.current.direction * 0.5;
+            }
+            
+            return decayedSpeed;
+          });
+        }
+      }, 100);
+    }
+    
     if (params.spin) {
+      // Set up spin animation
       let lastTime = performance.now()
+      
       function animate(now) {
-        const map = mapRef.current
         const bearing = map.getBearing()
-        const delta = ((now - lastTime) / 1000) * 4
-        map.rotateTo((bearing + delta) % 360, { duration: 0 })
+        const delta = ((now - lastTime) / 1000) * Math.abs(spinSpeed)
+        // Get direction from the sign of spinSpeed
+        const direction = Math.sign(spinSpeed) || 1;
+        
+        // Apply the direction to the rotation
+        map.rotateTo(
+          (bearing + delta * direction) % 360, 
+          { duration: 0 }
+        )
         lastTime = now
         spinRef.current = requestAnimationFrame(animate)
       }
+      
+      spinStateRef.current.isSpinning = true
       spinRef.current = requestAnimationFrame(animate)
-      return () => cancelAnimationFrame(spinRef.current)
+      startSpeedDecay()
+      
+      // Set up drag handlers for direction control
+      function handleDragStart(e) {
+        // Prevent default behavior to avoid confusion with map panning
+        if (e.originalEvent.preventDefault) {
+          e.originalEvent.preventDefault()
+        }
+        
+        spinStateRef.current.dragStarted = true
+        spinStateRef.current.lastDragPosition = [
+          e.originalEvent.clientX || (e.originalEvent.touches && e.originalEvent.touches[0].clientX),
+          e.originalEvent.clientY || (e.originalEvent.touches && e.originalEvent.touches[0].clientY)
+        ]
+        spinStateRef.current.lastDragTime = performance.now()
+      }
+
+      function handleDrag(e) {
+        if (!spinStateRef.current.dragStarted || !spinStateRef.current.lastDragPosition) return
+        
+        // Get current position
+        const clientX = e.originalEvent.clientX || (e.originalEvent.touches && e.originalEvent.touches[0].clientX)
+        const clientY = e.originalEvent.clientY || (e.originalEvent.touches && e.originalEvent.touches[0].clientY)
+        if (!clientX || !clientY) return
+        
+        const currentPos = [clientX, clientY]
+        const lastPos = spinStateRef.current.lastDragPosition
+        const currentTime = performance.now()
+        const timeDelta = currentTime - spinStateRef.current.lastDragTime
+        
+        // Skip if the time delta is too small (prevents jitter)
+        if (timeDelta < 30) return
+        
+        // Center of the map container for reference
+        const mapContainer = map.getContainer()
+        const centerX = mapContainer.offsetWidth / 2
+        const centerY = mapContainer.offsetHeight / 2
+        
+        // Calculate vectors from center to last and current positions
+        const lastVector = [lastPos[0] - centerX, lastPos[1] - centerY]
+        const currentVector = [currentPos[0] - centerX, currentPos[1] - centerY]
+        
+        // Calculate angle between these vectors to determine direction
+        const angleBetween = Math.atan2(
+          lastVector[0] * currentVector[1] - lastVector[1] * currentVector[0],
+          lastVector[0] * currentVector[0] + lastVector[1] * currentVector[1]
+        )
+        
+        // Determine direction based on the angle
+        const dragDirection = angleBetween > 0 ? 1 : -1
+        spinStateRef.current.direction = dragDirection
+        
+        // Calculate drag distance and velocity
+        const distance = Math.sqrt(
+          Math.pow(currentPos[0] - lastPos[0], 2) + 
+          Math.pow(currentPos[1] - lastPos[1], 2)
+        )
+        
+        // Calculate velocity (distance / time)
+        const velocity = distance / (timeDelta / 1000)
+        console.log(velocity)
+        // Calculate new speed increment based on velocity
+        const speedIncrement = Math.min(velocity * 0.01, 5) * -dragDirection
+        
+        // Update speed (additive)
+        setSpinSpeed(prevSpeed => {
+          // Limit maximum speed
+          const newSpeed = prevSpeed + speedIncrement
+          return Math.max(Math.min(newSpeed, 100), -100)
+        })
+        
+        // Update position and time for next calculation
+        spinStateRef.current.lastDragPosition = currentPos
+        spinStateRef.current.lastDragTime = currentTime
+        
+        // Reset the decay timer
+        startSpeedDecay()
+      }
+
+      function handleDragEnd() {
+        spinStateRef.current.dragStarted = false
+        spinStateRef.current.lastDragPosition = null
+        spinStateRef.current.lastDragTime = null
+      }
+
+      // Attach the event listeners for drag control
+      map.on('mousedown', handleDragStart)
+      map.on('touchstart', handleDragStart)
+      map.on('mousemove', handleDrag)
+      map.on('touchmove', handleDrag)
+      map.on('mouseup', handleDragEnd)
+      map.on('touchend', handleDragEnd)
+      map.on('mouseleave', handleDragEnd)
+      
+      return () => {
+        // Clean up animation
+        if (spinRef.current) {
+          cancelAnimationFrame(spinRef.current)
+        }
+        
+        // Clean up decay timer
+        if (decayTimerRef.current) {
+          clearInterval(decayTimerRef.current)
+        }
+        
+        spinStateRef.current.isSpinning = false
+        
+        // Remove all event listeners
+        map.off('mousedown', handleDragStart)
+        map.off('touchstart', handleDragStart)
+        map.off('mousemove', handleDrag)
+        map.off('touchmove', handleDrag)
+        map.off('mouseup', handleDragEnd)
+        map.off('touchend', handleDragEnd)
+        map.off('mouseleave', handleDragEnd)
+      }
+    } else {
+      // If spinning is turned off, make sure we cancel any existing animation
+      if (spinRef.current) {
+        cancelAnimationFrame(spinRef.current)
+        spinStateRef.current.isSpinning = false
+      }
+      
+      // Clear decay timer
+      if (decayTimerRef.current) {
+        clearInterval(decayTimerRef.current)
+      }
     }
-  }, [params.spin])
+  }, [params.spin, spinSpeed])
 
   // Animate to new params with flyTo if requested
   useEffect(() => {
