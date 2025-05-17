@@ -12,15 +12,91 @@ function Map({ params, markers = [], onMapLoad }) {
     mapboxgl.accessToken = 'pk.eyJ1IjoiZ2luZ2VybG9yZCIsImEiOiJjbWFzMTRremowYjNpMmxzaG05bG1pajA1In0.stYxpVfJdphbhzGq1c0Xlw'
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v12',    // ← ensure composite source is present
       center: params.center,
       zoom: params.zoom,
-      bearing: params.bearing,
       pitch: params.pitch,
+      bearing: params.bearing,
       interactive: params.interactive !== false,
       attributionControl: false,
       maxPitch: 85,
       maxZoom: 20,
     })
+
+    // once style is ready, add 3d‐buildings and events
+    mapRef.current.on('style.load', () => {
+      const map = mapRef.current
+
+      // add the 3d build-extrusion layer
+      if (!map.getLayer('3d-buildings')) {
+        map.addLayer({
+          id: '3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          type: 'fill-extrusion',
+          minzoom: 14,
+          paint: {
+            'fill-extrusion-color': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              '#ff0000',
+              '#aaa'
+            ],
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'min_height'],
+            'fill-extrusion-opacity': 1
+          }
+        }, 'road-label')
+      }
+
+      let hoveredId = null
+
+      // hover
+      map.on('mousemove', '3d-buildings', e => {
+        if (!e.features.length) return
+        // clear old hover
+        if (hoveredId !== null) {
+          map.setFeatureState(
+            { source: 'composite', sourceLayer: 'building', id: hoveredId },
+            { hover: false }
+          )
+        }
+        hoveredId = e.features[0].id
+        map.setFeatureState(
+          { source: 'composite', sourceLayer: 'building', id: hoveredId },
+          { hover: true }
+        )
+        map.getCanvas().style.cursor = 'pointer'
+      })
+
+      // leave
+      map.on('mouseleave', '3d-buildings', () => {
+        if (hoveredId !== null) {
+          map.setFeatureState(
+            { source: 'composite', sourceLayer: 'building', id: hoveredId },
+            { hover: false }
+          )
+          hoveredId = null
+        }
+        map.getCanvas().style.cursor = ''
+      })
+
+      // click
+      map.on('click', '3d-buildings', async e => {
+        if (!e.features.length) return
+        const { lng, lat } = e.lngLat
+        // reverse-geocode via Mapbox
+        const resp = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+          `${lng},${lat}.json?access_token=${mapboxgl.accessToken}`
+        )
+        const json = await resp.json()
+        const address = json.features[0]?.place_name || 'Address not found'
+        // show popup
+        console.log('address', address)
+      })
+    })
+
     if (onMapLoad) onMapLoad(mapRef.current)
     return () => {
       mapRef.current.remove()
