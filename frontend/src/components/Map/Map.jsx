@@ -38,9 +38,9 @@ function Map({ params, markers = [], onMapLoad }) {
           paint: {
             'fill-extrusion-color': [
               'case',
-              ['boolean', ['feature-state', 'hover'], false],
-              '#ff0000',
-              '#aaa'
+              ['boolean', ['feature-state', 'select'], false], '#00ff00',   // selected = green
+              ['boolean', ['feature-state', 'hover'], false], '#ff0000',  // hover = red
+              '#aaa'                                                      // default
             ],
             'fill-extrusion-height': ['get', 'height'],
             'fill-extrusion-base': ['get', 'min_height'],

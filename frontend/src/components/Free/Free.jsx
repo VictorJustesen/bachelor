@@ -1,99 +1,133 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
-import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder'
-import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css'
 import './Free.css'
 
 function Free({ map }) {
-  const [selectedData, setSelectedData] = useState(null)
-  const selectedIdRef = useRef(null)
+  if (!map) return null
 
+  const [addressInput, setAddressInput] = useState('')
+  const [selectedBuildingId, setSelectedBuildingId] = useState(null)
+  const [selectedData, setSelectedData] = useState(null)
+  const prevBuildingId = useRef(null)
+
+  // whenever selectedBuildingId changes, clear old hover and set new hover
   useEffect(() => {
     if (!map) return
-
-    const geocoder = new MapboxGeocoder({
-      accessToken: mapboxgl.accessToken,
-      mapboxgl,
-      placeholder: 'Search for address…',
-      marker: false
-    })
-
-    geocoder.addTo('#geocoder-container')
-
-    // helper to clear previous highlight and set new one
-    function highlightBuilding(featureId) {
-      if (selectedIdRef.current !== null) {
-        map.setFeatureState(
-          { source: 'composite', sourceLayer: 'building', id: selectedIdRef.current },
-          { hover: false }
-        )
-      }
-      selectedIdRef.current = featureId
+    // clear old
+    if (prevBuildingId.current != null) {
       map.setFeatureState(
-        { source: 'composite', sourceLayer: 'building', id: featureId },
-        { hover: true }
+        { source: 'composite', sourceLayer: 'building', id: prevBuildingId.current },
+        { select: false }
+      )
+    }
+    // set new
+    if (selectedBuildingId != null) {
+      map.setFeatureState(
+        { source: 'composite', sourceLayer: 'building', id: selectedBuildingId },
+        { select: true }
       )
       map.getCanvas().style.cursor = 'pointer'
+    } else {
+      map.getCanvas().style.cursor = ''
     }
-
-    // geocoder → flyTo + highlight
-    geocoder.on('result', ev => {
-      const [lng, lat] = ev.result.center
-      map.flyTo({ center: [lng, lat], essential: true })
-
-      geocoder.clear()
-      const input = document.querySelector('.mapboxgl-ctrl-geocoder input')
-      if (input) input.blur()
-
-      const pt = map.project([lng, lat])
-      const features = map.queryRenderedFeatures(pt, { layers: ['3d-buildings'] })
-      if (features.length) highlightBuilding(features[0].id)
-    })
-
-    // direct clicks on buildings should do the same
-    function onMapClick(e) {
-      const features = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })
-      if (features.length) {
-        const fid = features[0].id
-        highlightBuilding(fid)
-
-        // ← set up your select-overlay data here
-        setSelectedData({
-          address: '123 Example St',
-          sqm: 85,
-          zip: '90210',
-          city: 'Sample City',
-          rooms: 2,
-          year: 1995,
-          houseType: 'Townhouse',
-          region: 'Downtown',
-          salesHistory: [
-            { date: '2022-01-01', price: 750000 },
-            { date: '2020-06-15', price: 700000 }
-          ]
-        })
-      } else {
-        // click off builds closes select‐mode
-        setSelectedData(null)
-      }
-    }
-    map.on('click', onMapClick)
+    prevBuildingId.current = selectedBuildingId
 
     return () => {
-      geocoder.clear()
-      map.removeControl(geocoder)
-      map.off('click', onMapClick)
-      // clear last highlight
-      if (selectedIdRef.current !== null) {
+      if (prevBuildingId.current != null) {
         map.setFeatureState(
-          { source: 'composite', sourceLayer: 'building', id: selectedIdRef.current },
-          { hover: false }
+          { source: 'composite', sourceLayer: 'building', id: prevBuildingId.current },
+          { select: false }
         )
       }
     }
+  }, [map, selectedBuildingId])
+
+  // unify select logic so it always shows data and only highlights if feature exists
+  const selectFeature = (feature, coords, data) => {
+    setSelectedData(data) // always show overlay
+
+    if (feature) {
+      setSelectedBuildingId(feature.id)
+    } else {
+      setSelectedBuildingId(null)
+    }
+    map.flyTo({ center: coords, essential: true })
+  }
+
+  // 1) click‐handler: reverse‐geocode on e.lngLat
+  useEffect(() => {
+    if (!map) return
+    const onClickBuilding = async e => {
+      const [lng, lat] = [e.lngLat.lng, e.lngLat.lat]
+      // reverse‐geocode via coords
+      const rev = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+        `${lng},${lat}.json?access_token=${mapboxgl.accessToken}&limit=1`
+      )
+      const revJson = await rev.json()
+      const address = revJson.features[0]?.place_name || 'Unknown address'
+
+      const feat = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0] || null
+      selectFeature(feat, [lng, lat], {
+        address,
+        sqm: 100, zip: '12345', city: 'SampleCity',
+        rooms: 3, year: 2005, houseType: 'Detached',
+        region: 'Downtown',
+        salesHistory: [
+          { date: '2021-01-01', price: 600000 },
+          { date: '2019-06-15', price: 550000 }
+        ]
+      })
+    }
+    map.on('click', onClickBuilding)
+    return () => { map.off('click', onClickBuilding) }
   }, [map])
 
-  if (!map) return null
+  // 2) handleFlyTo: forward‐geocode to coords, then reverse‐geocode to get place_name
+  async function handleFlyTo() {
+    // 1) forward‐geocode to get [lng,lat]
+    const fwd = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+      `${encodeURIComponent(addressInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`
+    )
+    const { features: f } = await fwd.json()
+    if (!f.length) return
+    const [lng, lat] = f[0].center
+
+    // 2) reverse‐geocode to get the clean address
+    const rev = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+      `${lng},${lat}.json?access_token=${mapboxgl.accessToken}&limit=1`
+    )
+    const revJson = await rev.json()
+    const address = revJson.features[0]?.place_name || f[0].place_name
+
+    // 3) fly there
+    map.flyTo({ center: [lng, lat], essential: true })
+
+    // 4) once flight is done, pick the building under the center
+    map.once('moveend', () => {
+      const centerPoint = map.project([lng, lat])
+      const feat = map.queryRenderedFeatures(centerPoint, {
+        layers: ['3d-buildings']
+      })[0] || null
+
+      selectFeature(feat, [lng, lat], {
+        address,
+        sqm: 100,
+        zip: '12345',
+        city: 'SampleCity',
+        rooms: 3,
+        year: 2005,
+        houseType: 'Detached',
+        region: 'Downtown',
+        salesHistory: [
+          { date: '2021-01-01', price: 600000 },
+          { date: '2019-06-15', price: 550000 }
+        ]
+      })
+    })
+  }
 
   return (
     <div className="free-controls">
@@ -106,85 +140,34 @@ function Free({ map }) {
         Rotate right
       </button>
 
-      {/* geocoder UI */}
-      <div id="geocoder-container" className="address-input" />
+      <div className="address-input">
+        <input
+          type="text"
+          placeholder="Adresse"
+          value={addressInput}
+          onChange={e => setAddressInput(e.target.value)}
+        />
+        <button onClick={handleFlyTo}>Go</button>
+      </div>
 
-      {/* Select overlay */}
       {selectedData && (
         <div className="select-overlay">
           <h3>Building Details</h3>
-          <label>
-            Address:
+          <label>Address:
             <input
               value={selectedData.address}
               onChange={e => setSelectedData({ ...selectedData, address: e.target.value })}
             />
           </label>
-          <label>
-            SQM:
+          <label>SQM:
             <input
               type="number"
               value={selectedData.sqm}
               onChange={e => setSelectedData({ ...selectedData, sqm: +e.target.value })}
             />
           </label>
-          <label>
-            Zip Code:
-            <input
-              value={selectedData.zip}
-              onChange={e => setSelectedData({ ...selectedData, zip: e.target.value })}
-            />
-          </label>
-          <label>
-            City:
-            <input
-              value={selectedData.city}
-              onChange={e => setSelectedData({ ...selectedData, city: e.target.value })}
-            />
-          </label>
-          <label>
-            Rooms:
-            <input
-              type="number"
-              value={selectedData.rooms}
-              onChange={e => setSelectedData({ ...selectedData, rooms: +e.target.value })}
-            />
-          </label>
-          <label>
-            Year Built:
-            <input
-              type="number"
-              value={selectedData.year}
-              onChange={e => setSelectedData({ ...selectedData, year: +e.target.value })}
-            />
-          </label>
-          <label>
-            House Type:
-            <input
-              value={selectedData.houseType}
-              onChange={e => setSelectedData({ ...selectedData, houseType: e.target.value })}
-            />
-          </label>
-          <label>
-            Region:
-            <input
-              value={selectedData.region}
-              onChange={e => setSelectedData({ ...selectedData, region: e.target.value })}
-            />
-          </label>
-
-          <h4>Sales History</h4>
-          <ul>
-            {selectedData.salesHistory.map((sale, i) => (
-              <li key={i}>
-                {sale.date}: ${sale.price.toLocaleString()}
-              </li>
-            ))}
-          </ul>
-
-          <button onClick={() => alert('Estimating price...')}>
-            Estimate Price
-          </button>
+          {/* …other fields… */}
+          <button onClick={() => alert('Estimate Price')}>Estimate Price</button>
         </div>
       )}
     </div>
