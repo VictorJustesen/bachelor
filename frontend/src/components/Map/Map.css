@@ -1,0 +1,23 @@
+.map-container {
+  height: 100%;
+  width: 100%;
+  background-color: lightgrey;
+}
+
+.house-marker {
+  background-color: #ff5722;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.8em;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.house-marker.highlight {
+  box-shadow: 0 0 10px 2px yellow;
+}
