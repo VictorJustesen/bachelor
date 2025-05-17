@@ -49,6 +49,28 @@ function Map({ params, markers = [], onMapLoad }) {
         }, 'road-label')
       }
 
+      // add house‐number labels
+      if (!map.getLayer('house-numbers')) {
+        map.addLayer({
+          id: 'house-numbers',
+          type: 'symbol',
+          source: 'composite',
+          'source-layer': 'housenum_label',
+          minzoom: 16,
+          layout: {
+            'text-field': ['get', 'house_num'],      // the feature property
+            'text-font': ['DIN Offc Pro Medium','Arial Unicode MS Regular'],
+            'text-size': 12,
+            'text-offset': [0, 0.5],
+          },
+          paint: {
+            'text-color': '#222',
+            'text-halo-color': '#fff',
+            'text-halo-width': 1,
+          }
+        })
+      }
+
       let hoveredId = null
 
       // hover
