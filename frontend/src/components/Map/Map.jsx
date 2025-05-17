@@ -71,52 +71,55 @@ function Map({ params, markers = [], onMapLoad }) {
         })
       }
 
-      let hoveredId = null
+      // only wire up hover/click when interactive
+      if (params.interactive) {
+        let hoveredId = null
 
-      // hover
-      map.on('mousemove', '3d-buildings', e => {
-        if (!e.features.length) return
-        // clear old hover
-        if (hoveredId !== null) {
+        // hover
+        map.on('mousemove', '3d-buildings', e => {
+          if (!e.features.length) return
+          // clear old hover
+          if (hoveredId !== null) {
+            map.setFeatureState(
+              { source: 'composite', sourceLayer: 'building', id: hoveredId },
+              { hover: false }
+            )
+          }
+          hoveredId = e.features[0].id
           map.setFeatureState(
             { source: 'composite', sourceLayer: 'building', id: hoveredId },
-            { hover: false }
+            { hover: true }
           )
-        }
-        hoveredId = e.features[0].id
-        map.setFeatureState(
-          { source: 'composite', sourceLayer: 'building', id: hoveredId },
-          { hover: true }
-        )
-        map.getCanvas().style.cursor = 'pointer'
-      })
+          map.getCanvas().style.cursor = 'pointer'
+        })
 
-      // leave
-      map.on('mouseleave', '3d-buildings', () => {
-        if (hoveredId !== null) {
-          map.setFeatureState(
-            { source: 'composite', sourceLayer: 'building', id: hoveredId },
-            { hover: false }
+        // leave
+        map.on('mouseleave', '3d-buildings', () => {
+          if (hoveredId !== null) {
+            map.setFeatureState(
+              { source: 'composite', sourceLayer: 'building', id: hoveredId },
+              { hover: false }
+            )
+            hoveredId = null
+          }
+          map.getCanvas().style.cursor = ''
+        })
+
+        // click
+        map.on('click', '3d-buildings', async e => {
+          if (!e.features.length) return
+          const { lng, lat } = e.lngLat
+          // reverse-geocode via Mapbox
+          const resp = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+            `${lng},${lat}.json?access_token=${mapboxgl.accessToken}`
           )
-          hoveredId = null
-        }
-        map.getCanvas().style.cursor = ''
-      })
-
-      // click
-      map.on('click', '3d-buildings', async e => {
-        if (!e.features.length) return
-        const { lng, lat } = e.lngLat
-        // reverse-geocode via Mapbox
-        const resp = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-          `${lng},${lat}.json?access_token=${mapboxgl.accessToken}`
-        )
-        const json = await resp.json()
-        const address = json.features[0]?.place_name || 'Address not found'
-        // show popup
-        console.log('address', address)
-      })
+          const json = await resp.json()
+          const address = json.features[0]?.place_name || 'Address not found'
+          // show popup
+          console.log('address', address)
+        })
+      }
     })
 
     if (onMapLoad) onMapLoad(mapRef.current)
@@ -134,7 +137,7 @@ function Map({ params, markers = [], onMapLoad }) {
       function animate(now) {
         const map = mapRef.current
         const bearing = map.getBearing()
-        const delta = ((now - lastTime) / 1000) * 4 // slower spin
+        const delta = ((now - lastTime) / 1000) * 4
         map.rotateTo((bearing + delta) % 360, { duration: 0 })
         lastTime = now
         spinRef.current = requestAnimationFrame(animate)

@@ -1,7 +1,7 @@
 .free-controls {
   position: absolute;
   top: 10px;
-  right: 10px;
+  left: 10px;
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -15,4 +15,35 @@
   display: flex;
   gap: 4px;
   margin-top: 8px;
+}
+
+.address-input input {
+  flex: 1;
+  padding: 0.5em;
+  border-radius: 8px;
+    border: 1px solid black;
+}
+.select-overlay{
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background-color: Black;
+    border-radius: 8px;
+    padding: 8px;
+}
+.select-overlay > label{
+    display: flex;
+    
+}
+
+.select-overlay label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.select-overlay input{
+   width: 100%;
+   border-radius: 8px;
+   border: 1px solid black;
+    padding: 4px;
 }

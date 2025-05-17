@@ -64,10 +64,13 @@ function Free({ map }) {
         `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
         `${lng},${lat}.json?access_token=${mapboxgl.accessToken}&limit=1`
       )
+      console.log("hey")
       const revJson = await rev.json()
       const address = revJson.features[0]?.place_name || 'Unknown address'
 
       const feat = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0] || null
+      console.log('feat', feat)
+     
       selectFeature(feat, [lng, lat], {
         address,
         sqm: 100, zip: '12345', city: 'SampleCity',
@@ -78,6 +81,12 @@ function Free({ map }) {
           { date: '2019-06-15', price: 550000 }
         ]
       })
+        // fix
+       if (feat== null) {
+
+        setSelectedData(null)
+        
+      }
     }
     map.on('click', onClickBuilding)
     return () => { map.off('click', onClickBuilding) }
@@ -153,21 +162,96 @@ function Free({ map }) {
       {selectedData && (
         <div className="select-overlay">
           <h3>Building Details</h3>
-          <label>Address:
+
+          <label>
+            Address:
             <input
+              type="text"
               value={selectedData.address}
-              onChange={e => setSelectedData({ ...selectedData, address: e.target.value })}
+              onChange={e =>
+                setSelectedData({ ...selectedData, address: e.target.value })
+              }
             />
           </label>
-          <label>SQM:
+
+          <label>
+            SQM:
             <input
               type="number"
               value={selectedData.sqm}
-              onChange={e => setSelectedData({ ...selectedData, sqm: +e.target.value })}
+              onChange={e =>
+                setSelectedData({ ...selectedData, sqm: +e.target.value })
+              }
             />
           </label>
-          {/* …other fields… */}
-          <button onClick={() => alert('Estimate Price')}>Estimate Price</button>
+
+          <label>
+            Zip Code:
+            <input
+              type="text"
+              value={selectedData.zip}
+              onChange={e =>
+                setSelectedData({ ...selectedData, zip: e.target.value })
+              }
+            />
+          </label>
+
+          <label>
+            City:
+            <input
+              type="text"
+              value={selectedData.city}
+              onChange={e =>
+                setSelectedData({ ...selectedData, city: e.target.value })
+              }
+            />
+          </label>
+
+          <label>
+            Rooms:
+            <input
+              type="number"
+              value={selectedData.rooms}
+              onChange={e =>
+                setSelectedData({ ...selectedData, rooms: +e.target.value })
+              }
+            />
+          </label>
+
+          <label>
+            Year Built:
+            <input
+              type="number"
+              value={selectedData.year}
+              onChange={e =>
+                setSelectedData({ ...selectedData, year: +e.target.value })
+              }
+            />
+          </label>
+
+          <label>
+            House Type:
+            <input
+              type="text"
+              value={selectedData.houseType}
+              onChange={e =>
+                setSelectedData({ ...selectedData, houseType: e.target.value })
+              }
+            />
+          </label>
+
+          <h4>Sales History</h4>
+          <ul>
+            {selectedData.salesHistory.map((sale, i) => (
+              <li key={i}>
+                {sale.date}: ${sale.price.toLocaleString()}
+              </li>
+            ))}
+          </ul>
+
+          <button onClick={() => alert('Estimate Price')}>
+            Estimate Price
+          </button>
         </div>
       )}
     </div>
