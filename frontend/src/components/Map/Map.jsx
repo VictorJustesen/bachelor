@@ -8,6 +8,7 @@ function Map({ params, markers = [], onMapLoad }) {
   const spinRef = useRef()
   const decayTimerRef = useRef(null)
   const markersRef = useRef([])
+  const hoverRef = useRef({ hoveredId: null })
   
   // Use React state for values we want to trigger re-renders
   const [spinSpeed, setSpinSpeed] = useState(8) // Default spin speed in degrees per second
@@ -87,39 +88,6 @@ function Map({ params, markers = [], onMapLoad }) {
 
       // only wire up hover/click when interactive
       if (params.interactive) {
-        let hoveredId = null
-
-        // hover
-        map.on('mousemove', '3d-buildings', e => {
-          if (!e.features.length) return
-          // clear old hover
-          if (hoveredId !== null) {
-            map.setFeatureState(
-              { source: 'composite', sourceLayer: 'building', id: hoveredId },
-              { hover: false }
-            )
-          }
-          hoveredId = e.features[0].id
-          map.setFeatureState(
-            { source: 'composite', sourceLayer: 'building', id: hoveredId },
-            { hover: true }
-          )
-          map.getCanvas().style.cursor = 'pointer'
-        })
-
-        // leave
-        map.on('mouseleave', '3d-buildings', () => {
-          if (hoveredId !== null) {
-            map.setFeatureState(
-              { source: 'composite', sourceLayer: 'building', id: hoveredId },
-              { hover: false }
-            )
-            hoveredId = null
-          }
-          map.getCanvas().style.cursor = ''
-        })
-
-        // click
         map.on('click', '3d-buildings', async e => {
           if (!e.features.length) return
           const { lng, lat } = e.lngLat
@@ -225,8 +193,7 @@ function Map({ params, markers = [], onMapLoad }) {
         const currentTime = performance.now()
         const timeDelta = currentTime - spinStateRef.current.lastDragTime
         
-        // Skip if the time delta is too small (prevents jitter)
-        if (timeDelta < 30) return
+        if (timeDelta < 20) return
         
         // Center of the map container for reference
         const mapContainer = map.getContainer()
@@ -252,6 +219,7 @@ function Map({ params, markers = [], onMapLoad }) {
           Math.pow(currentPos[0] - lastPos[0], 2) + 
           Math.pow(currentPos[1] - lastPos[1], 2)
         )
+        if (distance < 30 ) return
         
         // Calculate velocity (distance / time)
         const velocity = distance / (timeDelta / 1000)
@@ -387,6 +355,52 @@ function Map({ params, markers = [], onMapLoad }) {
         .addTo(mapRef.current)
     })
   }, [markers])
+
+  // bind/unbind hover on free mode only
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+
+    function onMouseMove(e) {
+      if (!params.interactive || !e.features.length) return
+      // clear old
+      if (hoverRef.current.hoveredId !== null) {
+        map.setFeatureState(
+          { source: 'composite', sourceLayer: 'building', id: hoverRef.current.hoveredId },
+          { hover: false }
+        )
+      }
+      // set new
+      hoverRef.current.hoveredId = e.features[0].id
+      map.setFeatureState(
+        { source: 'composite', sourceLayer: 'building', id: hoverRef.current.hoveredId },
+        { hover: true }
+      )
+      map.getCanvas().style.cursor = 'pointer'
+    }
+
+    function onMouseLeave() {
+      if (!params.interactive) return
+      if (hoverRef.current.hoveredId !== null) {
+        map.setFeatureState(
+          { source: 'composite', sourceLayer: 'building', id: hoverRef.current.hoveredId },
+          { hover: false }
+        )
+        hoverRef.current.hoveredId = null
+      }
+      map.getCanvas().style.cursor = ''
+    }
+
+    map.on('mousemove', '3d-buildings', onMouseMove)
+    map.on('mouseleave','3d-buildings', onMouseLeave)
+
+    return () => {
+      map.off('mousemove','3d-buildings', onMouseMove)
+      map.off('mouseleave','3d-buildings', onMouseLeave)
+      // ensure cursor reset if switching out of interactive
+      map.getCanvas().style.cursor = ''
+    }
+  }, [params.interactive])
 
   return <div id="map-container" ref={mapContainerRef} />
 }
