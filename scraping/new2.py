@@ -53,7 +53,7 @@ def run_regional_modeling():
     SEGMENTATION_COLUMN = 'area' # Changed to 'area' as per your latest script
 
     relevant_cols = ['zip_code', 'date', 'purchase_price', 'city', 'sqm', 'no_rooms',
-                     'year_build', 'sqm_price', SEGMENTATION_COLUMN, 'region', 'house_type']
+                     'year_build', SEGMENTATION_COLUMN, 'region', 'house_type']
     missing_relevant_cols = [col for col in relevant_cols if col not in df.columns]
     if missing_relevant_cols:
         raise KeyError(f"Missing relevant columns for modeling: {missing_relevant_cols}.")
@@ -61,6 +61,7 @@ def run_regional_modeling():
         raise KeyError(f"The specified SEGMENTATION_COLUMN '{SEGMENTATION_COLUMN}' not found in DataFrame.")
 
     df_selected = df[relevant_cols].copy()
+    df_selected=df_selected.dropna()
 
     N_OVERALL_SUBSAMPLE = 200_000
     if len(df_selected) > N_OVERALL_SUBSAMPLE:
@@ -119,7 +120,7 @@ def run_regional_modeling():
         preprocessor_segment = ColumnTransformer(
             transformers=[
                 ('num', StandardScaler(), num_cols_segment),
-                ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=True, drop='first'), cat_cols_segment)
+                ('cat', OneHotEncoder(handle_unknown='ignore', sparse=True, drop=None), cat_cols_segment) 
             ],
             remainder='drop'
         )

@@ -45,7 +45,7 @@ print(f"Shape after deduplication: {df.shape}")
 
 # 6. Select relevant columns for the model (do this *before* subsampling to ensure columns exist)
 relevant_cols = ['zip_code', 'date', 'purchase_price', 'city', 'sqm', 'no_rooms', 
-                 'year_build', 'sqm_price', 'area', 'region', 'house_type']
+                 'year_build', 'area', 'region', 'house_type']
 # Check if all relevant columns exist
 missing_relevant_cols = [col for col in relevant_cols if col not in df.columns]
 if missing_relevant_cols:
@@ -53,7 +53,7 @@ if missing_relevant_cols:
 df_selected = df[relevant_cols].copy() # Use .copy() to avoid SettingWithCopyWarning later
 
 # 7. Subsample the last N rows for modeling
-N_SUBSAMPLE = 200_000
+N_SUBSAMPLE = 1000_000
 if len(df_selected) < N_SUBSAMPLE:
     print(f"Warning: DataFrame has only {len(df_selected)} rows after selection and deduplication. Using all available {len(df_selected)} rows for subsample.")
     sub = df_selected.copy()
@@ -81,7 +81,9 @@ cols_to_drop_for_X.extend(additional_datetime_cols_to_drop)
 cols_to_drop_for_X = list(set(cols_to_drop_for_X)) # Ensure unique columns
 
 print(f"Columns to drop for X: {cols_to_drop_for_X}")
-
+print(df.shape)
+sub=sub.dropna()
+print(df.shape)
 X = pd.get_dummies(sub.drop(columns=cols_to_drop_for_X), drop_first=True)
 y = sub['purchase_price'].to_numpy()
 
@@ -89,7 +91,7 @@ print(f"Shape of X before scaling: {X.shape}")
 print(f"Number of features in X: {X.shape[1]}") # This will show how many columns pd.get_dummies created
 
 # 9. TimeSeriesSplit CV and model comparison
-tscv = TimeSeriesSplit(n_splits=10, test_size=2000) # Using 10 splits as in your code
+tscv = TimeSeriesSplit(n_splits=3, test_size=5000) # Using 10 splits as in your code
 
 # Visualize the splits (using unscaled X or y is fine for index visualization)
 split_matrix_viz = np.zeros((tscv.get_n_splits(), len(X)))
