@@ -29,20 +29,21 @@ class BaseModelConfig(ABC):
             f'{self.get_model_name()}_conservative': self.get_param_grid('conservative')
         }
     
-    def train_and_predict(self, X_train, y_train, X_test, **model_params):
+    def train_and_predict(self, X_train, y_train, X_test, loss_fn=None, **model_params):
         """
         Simple train and predict - no hyperparameter tuning, no metrics calculation
         
         Args:
             X_train, y_train: Training data
             X_test: Test data for prediction
+            loss_fn: Custom loss function to pass to model
             **model_params: Specific model parameters to use
             
         Returns:
             Tuple of (trained_model, predictions)
         """
-        # Create and train model with specific parameters
-        model = self.get_model(**model_params)
+        # Create and train model with specific parameters and loss function
+        model = self.get_model(loss_fn=loss_fn, **model_params)
         model.fit(X_train, y_train)
         
         # Make predictions

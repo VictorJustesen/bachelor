@@ -4,15 +4,15 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import mean_squared_error
 
 class GridSearchTuner(BaseEstimator):
-    def __init__(self, estimator, param_grid, cv=None, scoring='neg_mean_squared_error', n_jobs=-1, verbose=0):
+    def __init__(self, estimator,  loss_fn, param_grid, cv=None, n_jobs=-1, verbose=0):
         self.estimator = estimator
         self.param_grid = param_grid
         self.cv = cv  # CV splitter
-        self.scoring = scoring
         self.n_jobs = n_jobs
         self.verbose = verbose
         self.best_params_ = None
         self.best_score_ = None
+        self.loss_fn = loss_fn
 
     def fit(self, X, y):
         """Fit with proper scaling per CV split"""
@@ -47,11 +47,8 @@ class GridSearchTuner(BaseEstimator):
                 model.fit(X_train_scaled, y_train_cv)
                 predictions = model.predict(X_val_scaled)
 
-                if self.scoring == 'neg_mean_squared_error':
-                    score = -mean_squared_error(y_val_cv, predictions)
-                else:
-                    raise ValueError(f"Unsupported scoring metric: {self.scoring}")
-                
+                score = self.loss_fn(y_val_cv, predictions)
+
                 cv_scores.append(score)
 
             # Average CV score for these parameters

@@ -1,4 +1,10 @@
 import pandas as pd
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+from Loss import Loss
+from Loss.mae import mae  # Import the class, not the module
+
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import TimeSeriesSplit
@@ -31,7 +37,8 @@ class SimpleAutoML:
                hypertuning_fn=None,
                n_splits=5,
                test_split=0.2,
-               verbose=1, param_amount='small') -> Dict[str, Any]:
+               verbose=1, param_amount='small',
+               loss_fn: Loss = mae()) -> Dict[str, Any]:
 
         print("Starting AutoML Pipeline - Training ALL available models...")
         
@@ -61,16 +68,17 @@ class SimpleAutoML:
                     print(f"  Running feature selection for {model_name}...")
                     
                     # Create a quick model instance for feature selection
-                    selector_model = model_config.get_model()
+                    selector_model = model_config.get_model(loss_fn=loss_fn)
                     
                     # Create feature selector with CV parameter
                     feature_selector = feature_selection_fn(
                         estimator=selector_model,
+                         loss_fn=loss_fn,
                         cv=cv,  # Pass CV splitter
                         scoring='neg_mean_squared_error',
-                        verbose=verbose
+                        verbose=verbose,
                     )
-                    
+
                     # Fit on training data, transform both sets
                     X_train_model = feature_selector.fit_transform(X_train_model, y_train)
                     X_test_model = feature_selector.transform(X_test_model)
@@ -84,17 +92,17 @@ class SimpleAutoML:
                     # Get parameter grid
                    
                     param_grid = model_config.get_param_grid(param_amount)
-                    base_model = model_config.get_model()
+                    base_model = model_config.get_model(loss_fn=loss_fn)
                     # Create and fit tuner with CV parameter
                     tuner = hypertuning_fn(
                         estimator=base_model,
+                        loss_fn=loss_fn,
                         param_grid=param_grid,
                         cv=cv,  # Pass same CV splitter
-                        scoring='neg_mean_squared_error',
                         n_jobs=-1,
                         verbose=verbose
                     )
-                    
+
                     tuner.fit(X_train_model, y_train)  # Uses feature-selected data
                     best_params = tuner.best_params_
                     cv_score = tuner.best_score_
@@ -108,7 +116,7 @@ class SimpleAutoML:
                 
                 # Step 2c: Train final model with proper scaling
                 result = self._train_and_evaluate_with_scaling(
-                    model_config, best_params, X_train_model, y_train, X_test_model, y_test, cv_score
+                    model_config, best_params, X_train_model, y_train, X_test_model, y_test, loss_fn, cv_score
                 )
                 
                 # Store feature selector info in results
@@ -117,14 +125,14 @@ class SimpleAutoML:
                 result['original_features'] = X_train.shape[1]
                 
                 model_results[model_name] = result
-                print(f"✓ {model_name} - Test RMSE: {result['metrics']['test_rmse']:.2f} (Features: {X_train_model.shape[1]})")
-                
+                print(f"✓ {model_name} - Test {loss_fn.name}: {result['metrics']['test_loss']:.2f} (Features: {X_train_model.shape[1]})")
+
             except Exception as e:
                 print(f"✗ {model_name} failed: {str(e)}")
                 model_results[model_name] = {'error': str(e)}
         
         # Step 3: Find best model and store results
-        best_model_name, best_result = self._get_best_model(model_results)
+        best_model_name, best_result = self._get_best_model(model_results , loss_fn)
         self.best_model = best_result['model']
         self.feature_selector = best_result.get('feature_selector')
         
@@ -140,8 +148,8 @@ class SimpleAutoML:
                 'models_trained': len(all_model_names)
             }
         }
-        
-        self._print_results()
+
+        self._print_results(loss_fn)
         return self.results
 
     def _prepare_data_splits_no_scaling(self, df, test_split):
@@ -162,7 +170,7 @@ class SimpleAutoML:
         print(f"Data split - Train: {len(X_train)}, Test: {len(X_test)}")
         return X_train, X_test, y_train, y_test
 
-    def _train_and_evaluate_with_scaling(self, model_config, params, X_train, y_train, X_test, y_test, cv_score=None):
+    def _train_and_evaluate_with_scaling(self, model_config, params, X_train, y_train, X_test, y_test, loss_fn, cv_score=None):
         """Train final model with proper scaling"""
         from helper.helper import helper  # Import helper
         
@@ -170,21 +178,16 @@ class SimpleAutoML:
         data_scaler = helper()
         X_train_scaled, X_test_scaled = data_scaler.scale(X_train, X_test)
         
-        # Store the fitted scaler
-       
-        
         # Train model on scaled data
-        model, y_pred = model_config.train_and_predict(X_train_scaled, y_train, X_test_scaled, **params)
+        model, y_pred = model_config.train_and_predict(X_train_scaled, y_train, X_test_scaled, loss_fn=loss_fn, **params)
         
-        # Calculate metrics
+        # Calculate metrics using consistent naming
         y_train_pred = model.predict(X_train_scaled)
         metrics = {
-            'train_rmse': np.sqrt(mean_squared_error(y_train, y_train_pred)),
-            'train_r2': r2_score(y_train, y_train_pred),
-            'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred)),
-            'test_r2': r2_score(y_test, y_pred)
+            'train_loss': loss_fn(y_train, y_train_pred),  # Simplified naming
+            'test_loss': loss_fn(y_test, y_pred)           # Simplified naming
         }
-        
+
         result = {
             'model': model,
             'params': params,
@@ -199,19 +202,23 @@ class SimpleAutoML:
 
 
     # Add this method to automl.py:
-    def _get_best_model(self, model_results):
-        """Get best model based on test RMSE"""
+    def _get_best_model(self, model_results, loss_fn):
+        """Get best model based on test metric"""
         valid_results = {name: result for name, result in model_results.items() 
-                        if 'error' not in result}
+                        if 'error' not in result and 'metrics' in result}
         
         if not valid_results:
             raise ValueError("No valid models found")
         
-        best_name = min(valid_results.keys(), 
-                    key=lambda x: valid_results[x]['metrics']['test_rmse'])
+        # Use consistent metric key
+        metric_key = 'test_loss'
         
+        # Find model with lowest test error (since lower is better for mae/rmse)
+        best_name = min(valid_results.keys(), 
+                       key=lambda x: valid_results[x]['metrics'].get(metric_key, float('inf')))
+
         return best_name, valid_results[best_name]
-    def _print_results(self):
+    def _print_results(self, loss_fn):
         """Print results summary"""
         print("\n" + "="*60)
         print("AUTOML RESULTS")
@@ -222,9 +229,8 @@ class SimpleAutoML:
                 print(f"{model_name}: FAILED - {result['error']}")
             else:
                 metrics = result['metrics']
-                print(f"{model_name}: Test RMSE: {metrics['test_rmse']:,.2f}, R²: {metrics['test_r2']:.4f}")
-        
+                print(f"{model_name}: Test {loss_fn.name}: {metrics['test_loss']:,.2f}")
+
         print(f"\nBest Model: {self.results['best_model']}")
         best_metrics = self.results['models'][self.results['best_model']]['metrics']
-        print(f"Best Test RMSE: {best_metrics['test_rmse']:,.2f}")
-        print(f"Best Test R²: {best_metrics['test_r2']:.4f}")
+        print(f"Best Test {loss_fn.name}: {best_metrics['test_loss']:,.2f}")

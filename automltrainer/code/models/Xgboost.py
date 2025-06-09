@@ -6,24 +6,40 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
     """XGBoost model with configuration - combines wrapper and config in one class"""
     
     def __init__(self, n_estimators=100, learning_rate=0.1, max_depth=6, 
-                 subsample=1.0, colsample_bytree=1.0, random_state=42, **kwargs):
+                 subsample=1.0, colsample_bytree=1.0, random_state=42, 
+                 loss_fn=None, **kwargs):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.max_depth = max_depth
         self.subsample = subsample
         self.colsample_bytree = colsample_bytree
         self.random_state = random_state
+        self.loss_fn = loss_fn  # Store custom loss function
         self.kwargs = kwargs
         self.model = None
     
+    def _get_xgb_objective(self, loss_fn):
+        """Map custom loss function to XGBoost objective"""
+        if loss_fn is None:
+            return 'reg:squarederror'  # Default
+            
+        loss_name = loss_fn.name.lower()
+        if loss_name == 'mae':
+            return 'reg:absoluteerror'
+        elif loss_name == 'rmse':
+            return 'reg:squarederror'
+        else:
+            return 'reg:squarederror'  # Fallback
+    
     # BaseModelConfig methods (configuration interface)
-    def get_model(self, **kwargs):
+    def get_model(self, loss_fn=None, **kwargs):
         """Create XGBoost model with default parameters"""
         default_params = {
             'random_state': 42,
             'n_estimators': 100,
             'learning_rate': 0.1,
-            'max_depth': 6
+            'max_depth': 6,
+            'loss_fn': loss_fn  # Pass loss function
         }
         params = {**default_params, **kwargs}
         return XGBoostConfig(**params)
@@ -48,15 +64,18 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             },
             'custom': {
                 'n_estimators': [100, 300, 600],
-                'learning_rate': [0.01, 0.05],
+                'learning_rate': [0.01, 0.05, 0.1],
                 'max_depth': [3, 6, 9]
             }
         }
-        return grids.get(grid_type)
+        return grids.get(grid_type, grids['small'])
     
     # Sklearn interface methods (model functionality)
     def fit(self, X, y):
         """Fit the XGBoost model"""
+        # Map custom loss to XGBoost objective
+        objective = self._get_xgb_objective(self.loss_fn)
+        
         self.model = xgb.XGBRegressor(
             n_estimators=self.n_estimators,
             learning_rate=self.learning_rate,
@@ -64,6 +83,7 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             subsample=self.subsample,
             colsample_bytree=self.colsample_bytree,
             random_state=self.random_state,
+            objective=objective,  # Use mapped objective
             **self.kwargs
         )
         self.model.fit(X, y)
@@ -84,6 +104,7 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             'subsample': self.subsample,
             'colsample_bytree': self.colsample_bytree,
             'random_state': self.random_state,
+            'loss_fn': self.loss_fn,
             **self.kwargs
         }
     
@@ -91,7 +112,7 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         """Set the parameters of this estimator"""
         for param, value in params.items():
             if param in ['n_estimators', 'learning_rate', 'max_depth', 
-                        'subsample', 'colsample_bytree', 'random_state']:
+                        'subsample', 'colsample_bytree', 'random_state', 'loss_fn']:
                 setattr(self, param, value)
             else:
                 self.kwargs[param] = value

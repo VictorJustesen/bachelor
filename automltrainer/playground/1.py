@@ -69,12 +69,12 @@ def main():
     df = load_cleaned_data()
     # Run 1: Simple
     simple_results = simple_run(df)
-    simple_rmse = simple_results['models'][simple_results['best_model']]['metrics']['test_rmse']
+    simple_rmse = simple_results['models'][simple_results['best_model']]['metrics']['test_loss']
     
     # Run 2: Full
     full_results = full_run(df)
-    full_rmse = full_results['models'][full_results['best_model']]['metrics']['test_rmse']
-    
+    full_rmse = full_results['models'][full_results['best_model']]['metrics']['test_loss']
+
     # Compare
     print("\n" + "="*60)
     print("COMPARISON")

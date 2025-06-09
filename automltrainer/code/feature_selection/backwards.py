@@ -5,13 +5,14 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
 
 class BackwardFeatureSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, estimator, cv=None, scoring='neg_mean_squared_error', verbose=0):
+    def __init__(self, estimator, loss_fn, cv=None, scoring='neg_mean_squared_error', verbose=0):
         self.estimator = estimator  # The model to use for evaluation
         self.cv = cv  # CV splitter (e.g., TimeSeriesSplit)
         self.scoring = scoring
         self.verbose = verbose
         self.selected_features_ = None  # To store the final selected features
         self.best_score_ = None
+        self.loss_fn = loss_fn
 
     def fit(self, X, y):
         """Fit using provided CV splitter with proper scaling per split"""
@@ -49,11 +50,11 @@ class BackwardFeatureSelector(BaseEstimator, TransformerMixin):
                     temp_estimator.fit(X_train_scaled, y_train_cv)
                     predictions = temp_estimator.predict(X_val_scaled)
 
-                    if self.scoring == 'neg_mean_squared_error':
-                        score = -mean_squared_error(y_val_cv, predictions)  # Negative for maximization
-                    else:
-                        raise ValueError(f"Unsupported scoring metric: {self.scoring}")
-                    
+
+
+                    score = self.loss_fn(y_val_cv, predictions)  # Negative for maximization
+
+
                     cv_scores.append(score)
 
                 # Average CV score
