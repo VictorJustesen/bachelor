@@ -1,17 +1,14 @@
 import pandas as pd
 import sys
 from pathlib import Path
+import re 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from Loss import Loss
-from Loss.mae import mae  # Import the class, not the module
 
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from feature_selection.backwards import BackwardFeatureSelector
-from hyper_tuning.grid_search import GridSearchTuner
 from models.model_registry import ModelRegistry
 import joblib
 from typing import Dict, Any, Optional, List
@@ -35,10 +32,11 @@ class SimpleAutoML:
     def run_automl(self, df: pd.DataFrame, 
                feature_selection_fn=None,
                hypertuning_fn=None,
+               models_to_run: Optional[List[str]] = None,
                n_splits=5,
                test_split=0.2,
                verbose=1, param_amount='small',
-               loss_fn: Loss = mae()) -> Dict[str, Any]:
+               loss_fn=None) -> Dict[str, Any]:
 
         print("Starting AutoML Pipeline - Training ALL available models...")
         
@@ -50,7 +48,7 @@ class SimpleAutoML:
         
         # Step 2: Train ALL available models (with individual feature selection)
         model_results = {}
-        all_model_names = self.model_registry.list_models()
+        all_model_names = models_to_run if models_to_run is not None else self.model_registry.list_models()
         print(f"Training {len(all_model_names)} models: {all_model_names}")
         
         for model_name in all_model_names:
@@ -75,7 +73,6 @@ class SimpleAutoML:
                         estimator=selector_model,
                          loss_fn=loss_fn,
                         cv=cv,  # Pass CV splitter
-                        scoring='neg_mean_squared_error',
                         verbose=verbose,
                     )
 
@@ -158,6 +155,13 @@ class SimpleAutoML:
         feature_cols = [col for col in df.columns if col not in ['date', self.target_col]]
         X = df[feature_cols].copy()
         y = df[self.target_col].copy()
+
+        # --- NEW: Sanitize column names ---
+        self.original_feature_names = X.columns.tolist()
+        sanitized_cols = {col: re.sub(r'[^a-zA-Z0-9_]', '_', col) for col in X.columns}
+        X = X.rename(columns=sanitized_cols)
+        self.sanitized_feature_names = X.columns.tolist()
+        # --- End of new code ---
         
         # Simple time series split for final train/test
         split_point = int(len(df) * (1 - test_split))

@@ -2,3 +2,7 @@ scraping/Housing_data_cleaned
 scraping/Housing_data_raw
 scraping/Addtional_data
 *.csv
+node_modules/
+.env
+*.log
+.DS_Store
