@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000/api'; // Your backend URL
+const API_BASE_URL = '/api'; // Your backend URL
 
 async function fetchFromBackend(endpoint, options) {
      const res = await fetch(`${API_BASE_URL}/${endpoint}`, options);
