@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import useSpin from './spin'
+import { reverseGeocode } from '../../api/mapbox.js'
 
 function Map({ params, markers = [], onMapLoad }) {
   const mapRef = useRef()
@@ -9,14 +10,13 @@ function Map({ params, markers = [], onMapLoad }) {
   const markersRef = useRef([])
   const hoverRef = useRef({ hoveredId: null })
   
-  // Use React state for values we want to trigger re-renders
-  const [spinSpeed, setSpinSpeed] = useState(8) // Default spin speed in degrees per second
+  const [spinSpeed, setSpinSpeed] = useState(8)
 
   useEffect(() => {
-    mapboxgl.accessToken = 'pk.eyJ1IjoiZ2luZ2VybG9yZCIsImEiOiJjbWFzMTRremowYjNpMmxzaG05bG1pajA1In0.stYxpVfJdphbhzGq1c0Xlw'
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',    // ← ensure composite source is present
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: params.center,
       zoom: params.zoom,
       pitch: params.pitch,
@@ -27,11 +27,9 @@ function Map({ params, markers = [], onMapLoad }) {
       maxZoom: 20,
     })
 
-    // once style is ready, add 3d‐buildings and events
     mapRef.current.on('style.load', () => {
       const map = mapRef.current
 
-      // add the 3d build-extrusion layer
       if (!map.getLayer('3d-buildings')) {
         map.addLayer({
           id: '3d-buildings',
@@ -42,9 +40,9 @@ function Map({ params, markers = [], onMapLoad }) {
           paint: {
             'fill-extrusion-color': [
               'case',
-              ['boolean', ['feature-state', 'select'], false], '#00ff00',   // selected = green
-              ['boolean', ['feature-state', 'hover'], false], '#ff0000',  // hover = red
-              '#aaa'                                                      // default
+              ['boolean', ['feature-state', 'select'], false], '#00ff00',
+              ['boolean', ['feature-state', 'hover'], false], '#ff0000',
+              '#aaa'
             ],
             'fill-extrusion-height': ['get', 'height'],
             'fill-extrusion-base': ['get', 'min_height'],
@@ -53,7 +51,6 @@ function Map({ params, markers = [], onMapLoad }) {
         }, 'road-label')
       }
 
-      // add house‐number labels
       if (!map.getLayer('house-numbers')) {
         map.addLayer({
           id: 'house-numbers',
@@ -62,7 +59,7 @@ function Map({ params, markers = [], onMapLoad }) {
           'source-layer': 'housenum_label',
           minzoom: 16,
           layout: {
-            'text-field': ['get', 'house_num'],      // the feature property
+            'text-field': ['get', 'house_num'],
             'text-font': ['DIN Offc Pro Medium','Arial Unicode MS Regular'],
             'text-size': 12,
             'text-offset': [0, 0.5],
@@ -75,19 +72,14 @@ function Map({ params, markers = [], onMapLoad }) {
         })
       }
 
-      // only wire up hover/click when interactive
       if (params.interactive) {
         map.on('click', '3d-buildings', async e => {
           if (!e.features.length) return
           const { lng, lat } = e.lngLat
-          // reverse-geocode via Mapbox
-          const resp = await fetch(
-            `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-            `${lng},${lat}.json?access_token=${mapboxgl.accessToken}`
-          )
-          const json = await resp.json()
-          const address = json.features[0]?.place_name || 'Address not found'
-          // show popup
+          
+          const features = await reverseGeocode(lng, lat)
+          const address = features[0]?.place_name || 'Address not found'
+          
           console.log('address', address)
         })
       }
@@ -99,10 +91,8 @@ function Map({ params, markers = [], onMapLoad }) {
     }
   }, [])
 
-  // NEW: wire up spin hook
   useSpin(mapRef, params, spinSpeed, setSpinSpeed)
 
-  // Animate to new params with flyTo if requested
   useEffect(() => {
     if (!mapRef.current) return
     if (params.flyToOnMount) {
@@ -111,7 +101,7 @@ function Map({ params, markers = [], onMapLoad }) {
         zoom: params.zoom,
         bearing: params.bearing,
         pitch: params.pitch,
-        speed: 1.2, // adjust for slower/faster animation
+        speed: 1.2,
         curve: 1.8,
         essential: true,
       })
@@ -125,7 +115,6 @@ function Map({ params, markers = [], onMapLoad }) {
     }
   }, [params.center, params.zoom, params.pitch, params.bearing, params.spin, params.flyToOnMount])
 
-  // toggle map interactivity on the fly
   useEffect(() => {
     if (!mapRef.current) return
     const map = mapRef.current
@@ -148,12 +137,9 @@ function Map({ params, markers = [], onMapLoad }) {
     }
   }, [params.interactive])
 
-  // render house markers
   useEffect(() => {
     if (!mapRef.current) return
-    // clear old markers
     markersRef.current.forEach(m => m.remove())
-    // add new ones
     markersRef.current = markers.map(({ lngLat, number, highlight }) => {
       const el = document.createElement('div')
       el.className = 'house-marker'
@@ -165,21 +151,18 @@ function Map({ params, markers = [], onMapLoad }) {
     })
   }, [markers])
 
-  // bind/unbind hover on free mode only
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
 
     function onMouseMove(e) {
       if (!params.interactive || !e.features.length) return
-      // clear old
       if (hoverRef.current.hoveredId !== null) {
         map.setFeatureState(
           { source: 'composite', sourceLayer: 'building', id: hoverRef.current.hoveredId },
           { hover: false }
         )
       }
-      // set new
       hoverRef.current.hoveredId = e.features[0].id
       map.setFeatureState(
         { source: 'composite', sourceLayer: 'building', id: hoverRef.current.hoveredId },
@@ -206,7 +189,6 @@ function Map({ params, markers = [], onMapLoad }) {
     return () => {
       map.off('mousemove','3d-buildings', onMouseMove)
       map.off('mouseleave','3d-buildings', onMouseLeave)
-      // ensure cursor reset if switching out of interactive
       map.getCanvas().style.cursor = ''
     }
   }, [params.interactive])

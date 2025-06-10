@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
-import mapboxgl from 'mapbox-gl'
+import { forwardGeocode, reverseGeocode } from '../../api/mapbox'
+import { getBuildingDetails, getPropertyHistory, estimatePrice } from '../../api/backend'
 import './Free.css'
 
 function Free({ map }) {
@@ -8,250 +9,288 @@ function Free({ map }) {
   const [addressInput, setAddressInput] = useState('')
   const [selectedBuildingId, setSelectedBuildingId] = useState(null)
   const [selectedData, setSelectedData] = useState(null)
+  const [estimatedPrice, setEstimatedPrice] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isFetchingInfo, setIsFetchingInfo] = useState(false)
   const prevBuildingId = useRef(null)
+  const hoveredId = useRef(null) // Add ref for hover state
 
-  // whenever selectedBuildingId changes, clear old hover and set new hover
   useEffect(() => {
     if (!map) return
-    // clear old
-    if (prevBuildingId.current != null) {
+    if (prevBuildingId.current !== null) {
       map.setFeatureState(
         { source: 'composite', sourceLayer: 'building', id: prevBuildingId.current },
         { select: false }
       )
     }
-    // set new
-    if (selectedBuildingId != null) {
+    if (selectedBuildingId !== null) {
       map.setFeatureState(
         { source: 'composite', sourceLayer: 'building', id: selectedBuildingId },
         { select: true }
       )
-      map.getCanvas().style.cursor = 'pointer'
-    } else {
-      map.getCanvas().style.cursor = ''
     }
     prevBuildingId.current = selectedBuildingId
-
-    return () => {
-      if (prevBuildingId.current != null) {
-        map.setFeatureState(
-          { source: 'composite', sourceLayer: 'building', id: prevBuildingId.current },
-          { select: false }
-        )
-      }
-    }
   }, [map, selectedBuildingId])
 
-  // unify select logic so it always shows data and only highlights if feature exists
-  const selectFeature = (feature, coords, data) => {
-    setSelectedData(data) // always show overlay
-
+  const selectFeature = async (feature, coords) => {
     if (feature) {
       setSelectedBuildingId(feature.id)
+      setEstimatedPrice(null)
+      map.flyTo({ center: coords, zoom: 18, pitch: 60, essential: true })
+      
+      const geoFeatures = await reverseGeocode(coords[0], coords[1])
+      const address = geoFeatures[0]?.place_name || 'Address not found'
+      
+      setSelectedData({ address, salesHistory: [] })
+
     } else {
       setSelectedBuildingId(null)
+      setSelectedData(null)
+      setEstimatedPrice(null)
     }
-    map.flyTo({ center: coords, essential: true })
   }
 
-  // 1) click‐handler: reverse‐geocode on e.lngLat
   useEffect(() => {
     if (!map) return
-    const onClickBuilding = async e => {
-      const [lng, lat] = [e.lngLat.lng, e.lngLat.lat]
-      // reverse‐geocode via coords
-      const rev = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-        `${lng},${lat}.json?access_token=${mapboxgl.accessToken}&limit=1`
-      )
-      console.log("hey")
-      const revJson = await rev.json()
-      const address = revJson.features[0]?.place_name || 'Unknown address'
+    
+    // Click handler
+    const onClick = async e => {
+      const coords = [e.lngLat.lng, e.lngLat.lat]
+      const feature = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0] || null
+      selectFeature(feature, coords)
+    }
 
-      const feat = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })[0] || null
-      console.log('feat', feat)
-     
-      selectFeature(feat, [lng, lat], {
-        address,
-        sqm: 100, zip: '12345', city: 'SampleCity',
-        rooms: 3, year: 2005, houseType: 'Detached',
-        region: 'Downtown',
-        salesHistory: [
-          { date: '2021-01-01', price: 600000 },
-          { date: '2019-06-15', price: 550000 }
-        ]
-      })
-        // fix
-       if (feat== null) {
-
-        setSelectedData(null)
+    // Mouse move handler for hover effect
+    const onMouseMove = e => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })
+      
+      if (features.length > 0) {
+        // Change cursor to pointer
+        map.getCanvas().style.cursor = 'pointer'
         
+        const feature = features[0]
+        
+        // Remove hover from previous feature
+        if (hoveredId.current !== null && hoveredId.current !== feature.id) {
+          map.setFeatureState(
+            { source: 'composite', sourceLayer: 'building', id: hoveredId.current },
+            { hover: false }
+          )
+        }
+        
+        // Add hover to current feature
+        if (hoveredId.current !== feature.id) {
+          hoveredId.current = feature.id
+          map.setFeatureState(
+            { source: 'composite', sourceLayer: 'building', id: feature.id },
+            { hover: true }
+          )
+        }
+      } else {
+        // Reset cursor
+        map.getCanvas().style.cursor = ''
+        
+        // Remove hover from previous feature
+        if (hoveredId.current !== null) {
+          map.setFeatureState(
+            { source: 'composite', sourceLayer: 'building', id: hoveredId.current },
+            { hover: false }
+          )
+          hoveredId.current = null
+        }
       }
     }
-    map.on('click', onClickBuilding)
-    return () => { map.off('click', onClickBuilding) }
+
+    // Mouse leave handler
+    const onMouseLeave = () => {
+      map.getCanvas().style.cursor = ''
+      
+      if (hoveredId.current !== null) {
+        map.setFeatureState(
+          { source: 'composite', sourceLayer: 'building', id: hoveredId.current },
+          { hover: false }
+        )
+        hoveredId.current = null
+      }
+    }
+
+    map.on('click', onClick)
+    map.on('mousemove', '3d-buildings', onMouseMove)
+    map.on('mouseleave', '3d-buildings', onMouseLeave)
+    
+    return () => {
+      map.off('click', onClick)
+      map.off('mousemove', '3d-buildings', onMouseMove)
+      map.off('mouseleave', '3d-buildings', onMouseLeave)
+    }
   }, [map])
 
-  // 2) handleFlyTo: forward‐geocode to coords, then reverse‐geocode to get place_name
   async function handleFlyTo() {
-    // 1) forward‐geocode to get [lng,lat]
-    const fwd = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-      `${encodeURIComponent(addressInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`
-    )
-    const { features: f } = await fwd.json()
-    if (!f.length) return
-    const [lng, lat] = f[0].center
+    const features = await forwardGeocode(addressInput)
+    if (!features.length) {
+        alert("Address not found")
+        return
+    }
+    const [lng, lat] = features[0].center
 
-    // 2) reverse‐geocode to get the clean address
-    const rev = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
-      `${lng},${lat}.json?access_token=${mapboxgl.accessToken}&limit=1`
-    )
-    const revJson = await rev.json()
-    const address = revJson.features[0]?.place_name || f[0].place_name
+    map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true })
 
-    // 3) fly there
-    map.flyTo({ center: [lng, lat], essential: true })
-
-    // 4) once flight is done, pick the building under the center
     map.once('moveend', () => {
       const centerPoint = map.project([lng, lat])
-      const feat = map.queryRenderedFeatures(centerPoint, {
+      const feature = map.queryRenderedFeatures(centerPoint, {
         layers: ['3d-buildings']
       })[0] || null
 
-      selectFeature(feat, [lng, lat], {
-        address,
-        sqm: 100,
-        zip: '12345',
-        city: 'SampleCity',
-        rooms: 3,
-        year: 2005,
-        houseType: 'Detached',
-        region: 'Downtown',
-        salesHistory: [
-          { date: '2021-01-01', price: 600000 },
-          { date: '2019-06-15', price: 550000 }
-        ]
-      })
+      if (feature) {
+          selectFeature(feature, [lng, lat])
+      } else {
+          setSelectedBuildingId(null)
+          setSelectedData({ address: features[0].place_name, salesHistory: [] })
+          setEstimatedPrice(null)
+      }
     })
+  }
+
+  async function handleFetchInformation() {
+    if (!selectedData || !selectedData.address) return;
+    
+    setIsFetchingInfo(true);
+    try {
+      // Fetch both building info and property history
+      const [buildingInfo, historyData] = await Promise.all([
+        getBuildingDetails(selectedBuildingId, selectedData.address),
+        getPropertyHistory(selectedData.address, selectedData.zip)
+      ]);
+      
+      setSelectedData({
+        ...selectedData,
+        sqm: buildingInfo.sqm,
+        rooms: buildingInfo.rooms,
+        year: buildingInfo.year,
+        zip: buildingInfo.zip,
+        city: buildingInfo.city,
+        buildingType: buildingInfo.buildingType,
+        salesHistory: historyData.salesHistory || buildingInfo.salesHistory || [],
+        marketTrends: historyData.marketTrends
+      });
+
+    } catch (error) {
+      console.error('Error fetching information:', error);
+      alert('Fejl ved hentning af information');
+    } finally {
+      setIsFetchingInfo(false);
+    }
+  }
+  
+  async function handleEstimatePrice() {
+      if (!selectedData) return
+      
+      setIsLoading(true)
+      try {
+        const result = await estimatePrice(selectedData)
+        setEstimatedPrice(result)
+      } catch (error) {
+        console.error('Error estimating price:', error)
+        alert('Fejl ved prisberegning')
+      } finally {
+        setIsLoading(false)
+      }
   }
 
   return (
     <div className="free-controls">
-      <button onClick={() => map.zoomIn()}>Zoom In</button>
-      <button onClick={() => map.zoomOut()}>Zoom Out</button>
-      <button onClick={() => map.rotateTo(map.getBearing() + 30, { duration: 500 })}>
-        Rotate left
-      </button>
-      <button onClick={() => map.rotateTo(map.getBearing() - 30, { duration: 500 })}>
-        Rotate right
-      </button>
-
       <div className="address-input">
         <input
           type="text"
-          placeholder="Adresse"
+          placeholder="Søg på en adresse"
           value={addressInput}
           onChange={e => setAddressInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleFlyTo()}
         />
-        <button onClick={handleFlyTo}>Go</button>
+        <button onClick={handleFlyTo}>Søg</button>
       </div>
 
       {selectedData && (
         <div className="select-overlay">
-          <h3>Building Details</h3>
-
+          <h3>Ejendomsdata</h3>
           <label>
-            Address:
-            <input
-              type="text"
-              value={selectedData.address}
-              onChange={e =>
-                setSelectedData({ ...selectedData, address: e.target.value })
-              }
-            />
+            Adresse:
+            <input type="text" value={selectedData.address} readOnly />
           </label>
-
           <label>
-            SQM:
+            Kvadratmeter:
             <input
               type="number"
-              value={selectedData.sqm}
-              onChange={e =>
-                setSelectedData({ ...selectedData, sqm: +e.target.value })
-              }
+              value={selectedData.sqm || ''}
+              onChange={e => setSelectedData({ ...selectedData, sqm: +e.target.value })}
             />
           </label>
-
           <label>
-            Zip Code:
-            <input
-              type="text"
-              value={selectedData.zip}
-              onChange={e =>
-                setSelectedData({ ...selectedData, zip: e.target.value })
-              }
-            />
+            Postnummer:
+            <input type="text" value={selectedData.zip || ''} readOnly />
           </label>
-
           <label>
-            City:
-            <input
-              type="text"
-              value={selectedData.city}
-              onChange={e =>
-                setSelectedData({ ...selectedData, city: e.target.value })
-              }
-            />
+            By:
+            <input type="text" value={selectedData.city || ''} readOnly />
           </label>
-
           <label>
-            Rooms:
+            Antal rum:
             <input
               type="number"
-              value={selectedData.rooms}
-              onChange={e =>
-                setSelectedData({ ...selectedData, rooms: +e.target.value })
-              }
+              value={selectedData.rooms || ''}
+              onChange={e => setSelectedData({ ...selectedData, rooms: +e.target.value })}
             />
           </label>
-
           <label>
-            Year Built:
+            Byggeår:
             <input
               type="number"
-              value={selectedData.year}
-              onChange={e =>
-                setSelectedData({ ...selectedData, year: +e.target.value })
-              }
+              value={selectedData.year || ''}
+              onChange={e => setSelectedData({ ...selectedData, year: +e.target.value })}
             />
           </label>
 
-          <label>
-            House Type:
-            <input
-              type="text"
-              value={selectedData.houseType}
-              onChange={e =>
-                setSelectedData({ ...selectedData, houseType: e.target.value })
-              }
-            />
-          </label>
-
-          <h4>Sales History</h4>
+          <h4>Salgshistorik</h4>
           <ul>
-            {selectedData.salesHistory.map((sale, i) => (
+            {selectedData.salesHistory?.map((sale, i) => (
               <li key={i}>
-                {sale.date}: ${sale.price.toLocaleString()}
+                {sale.date}: DKK {sale.price.toLocaleString()} {sale.type && `(${sale.type})`}
               </li>
             ))}
           </ul>
 
-          <button onClick={() => alert('Estimate Price')}>
-            Estimate Price
+          {/* Market trends if available */}
+          {selectedData.marketTrends && (
+            <div className="market-trends">
+              <h4>Markedsdata</h4>
+              <p>Gennemsnitspris per m²: DKK {selectedData.marketTrends.averagePricePerSqm?.toLocaleString()}</p>
+              <p>Gennemsnitlig salgstid: {selectedData.marketTrends.averageSellTime} dage</p>
+              <p>Prisændring (1 år): {selectedData.marketTrends.priceChange1Year}</p>
+            </div>
+          )}
+
+          {/* Button for fetching all information */}
+          <button onClick={handleFetchInformation} disabled={isFetchingInfo}>
+            {isFetchingInfo ? 'Henter information...' : 'Hent information'}
           </button>
+
+          <button onClick={handleEstimatePrice} disabled={isLoading}>
+            {isLoading ? 'Beregner...' : 'Beregn pris'}
+          </button>
+
+          {/* Display estimated price */}
+          {estimatedPrice && (
+            <div className="estimated-price">
+              <h4>Estimeret pris:</h4>
+              <p className="price-value">DKK {estimatedPrice.estimated_price?.toLocaleString()}</p>
+              {estimatedPrice.confidence_score && (
+                <p className="confidence">Tillid: {(estimatedPrice.confidence_score * 100).toFixed(1)}%</p>
+              )}
+              {estimatedPrice.model_version && (
+                <p className="model-info">Model: {estimatedPrice.model_version}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
