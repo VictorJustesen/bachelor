@@ -7,13 +7,18 @@ function Free({ map }) {
   if (!map) return null
 
   const [addressInput, setAddressInput] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
   const [selectedBuildingId, setSelectedBuildingId] = useState(null)
   const [selectedData, setSelectedData] = useState(null)
   const [estimatedPrice, setEstimatedPrice] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isFetchingInfo, setIsFetchingInfo] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
   const prevBuildingId = useRef(null)
-  const hoveredId = useRef(null) // Add ref for hover state
+  const hoveredId = useRef(null)
+  const searchTimeoutRef = useRef(null)
+  const dropdownRef = useRef(null)
 
   useEffect(() => {
     if (!map) return
@@ -32,6 +37,64 @@ function Free({ map }) {
     prevBuildingId.current = selectedBuildingId
   }, [map, selectedBuildingId])
 
+  // Handle search input with debouncing
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (addressInput.length > 2) {
+      setIsSearching(true)
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const features = await forwardGeocode(addressInput + ' Denmark')
+          
+          // Filter to only show addresses with house numbers
+          const filteredFeatures = features.filter(feature => {
+            const placeType = feature.place_type || []
+            const placeName = feature.place_name || ''
+            
+            // Only include addresses that have house numbers
+            return placeType.includes('address') && 
+                   /\d+/.test(placeName) && // Contains numbers (house number)
+                   !placeType.includes('poi') // Not a point of interest
+          })
+          
+          setSearchResults(filteredFeatures.slice(0, 5))
+          setShowDropdown(filteredFeatures.length > 0)
+        } catch (error) {
+          console.error('Search error:', error)
+          setSearchResults([])
+          setShowDropdown(false)
+        } finally {
+          setIsSearching(false)
+        }
+      }, 300) // 300ms debounce
+    } else {
+      setSearchResults([])
+      setShowDropdown(false)
+      setIsSearching(false)
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [addressInput])
+
+  // Handle clicking outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const selectFeature = async (feature, coords) => {
     if (feature) {
       setSelectedBuildingId(feature.id)
@@ -42,12 +105,59 @@ function Free({ map }) {
       const address = geoFeatures[0]?.place_name || 'Address not found'
       
       setSelectedData({ address, salesHistory: [] })
+      
+      // Auto-fetch information after selecting a building
+      setTimeout(() => {
+        handleFetchInformation({ address, salesHistory: [] }, feature.id)
+      }, 1000) // Wait 1 second for map animation to complete
 
     } else {
       setSelectedBuildingId(null)
       setSelectedData(null)
       setEstimatedPrice(null)
     }
+  }
+
+  // Handle search result selection
+  const handleSelectResult = async (result) => {
+    const [lng, lat] = result.center
+    setAddressInput(result.place_name)
+    setShowDropdown(false)
+    setSearchResults([])
+
+    // Fly to location
+    map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true })
+
+    // Wait for map to finish moving, then find building
+    map.once('moveend', async () => {
+      const centerPoint = map.project([lng, lat])
+      const feature = map.queryRenderedFeatures(centerPoint, {
+        layers: ['3d-buildings']
+      })[0] || null
+
+      if (feature) {
+        setSelectedBuildingId(feature.id)
+        setEstimatedPrice(null)
+        
+        const selectedDataObj = { 
+          address: result.place_name, 
+          salesHistory: [] 
+        }
+        setSelectedData(selectedDataObj)
+        
+        // Auto-fetch information
+        setTimeout(() => {
+          handleFetchInformation(selectedDataObj, feature.id)
+        }, 500)
+      } else {
+        setSelectedBuildingId(null)
+        setSelectedData({ 
+          address: result.place_name, 
+          salesHistory: [] 
+        })
+        setEstimatedPrice(null)
+      }
+    })
   }
 
   useEffect(() => {
@@ -65,12 +175,10 @@ function Free({ map }) {
       const features = map.queryRenderedFeatures(e.point, { layers: ['3d-buildings'] })
       
       if (features.length > 0) {
-        // Change cursor to pointer
         map.getCanvas().style.cursor = 'pointer'
         
         const feature = features[0]
         
-        // Remove hover from previous feature
         if (hoveredId.current !== null && hoveredId.current !== feature.id) {
           map.setFeatureState(
             { source: 'composite', sourceLayer: 'building', id: hoveredId.current },
@@ -78,7 +186,6 @@ function Free({ map }) {
           )
         }
         
-        // Add hover to current feature
         if (hoveredId.current !== feature.id) {
           hoveredId.current = feature.id
           map.setFeatureState(
@@ -87,10 +194,8 @@ function Free({ map }) {
           )
         }
       } else {
-        // Reset cursor
         map.getCanvas().style.cursor = ''
         
-        // Remove hover from previous feature
         if (hoveredId.current !== null) {
           map.setFeatureState(
             { source: 'composite', sourceLayer: 'building', id: hoveredId.current },
@@ -101,7 +206,6 @@ function Free({ map }) {
       }
     }
 
-    // Mouse leave handler
     const onMouseLeave = () => {
       map.getCanvas().style.cursor = ''
       
@@ -125,45 +229,21 @@ function Free({ map }) {
     }
   }, [map])
 
-  async function handleFlyTo() {
-    const features = await forwardGeocode(addressInput)
-    if (!features.length) {
-        alert("Address not found")
-        return
-    }
-    const [lng, lat] = features[0].center
-
-    map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true })
-
-    map.once('moveend', () => {
-      const centerPoint = map.project([lng, lat])
-      const feature = map.queryRenderedFeatures(centerPoint, {
-        layers: ['3d-buildings']
-      })[0] || null
-
-      if (feature) {
-          selectFeature(feature, [lng, lat])
-      } else {
-          setSelectedBuildingId(null)
-          setSelectedData({ address: features[0].place_name, salesHistory: [] })
-          setEstimatedPrice(null)
-      }
-    })
-  }
-
-  async function handleFetchInformation() {
-    if (!selectedData || !selectedData.address) return;
+  async function handleFetchInformation(dataOverride = null, buildingIdOverride = null) {
+    const currentData = dataOverride || selectedData
+    const currentBuildingId = buildingIdOverride || selectedBuildingId
     
-    setIsFetchingInfo(true);
+    if (!currentData || !currentData.address) return
+
+    setIsFetchingInfo(true)
     try {
-      // Fetch both building info and property history
       const [buildingInfo, historyData] = await Promise.all([
-        getBuildingDetails(selectedBuildingId, selectedData.address),
-        getPropertyHistory(selectedData.address, selectedData.zip)
-      ]);
+        getBuildingDetails(currentBuildingId, currentData.address),
+        getPropertyHistory(currentData.address, currentData.zip)
+      ])
       
-      setSelectedData({
-        ...selectedData,
+      const updatedData = {
+        ...currentData,
         sqm: buildingInfo.sqm,
         rooms: buildingInfo.rooms,
         year: buildingInfo.year,
@@ -172,42 +252,68 @@ function Free({ map }) {
         buildingType: buildingInfo.buildingType,
         salesHistory: historyData.salesHistory || buildingInfo.salesHistory || [],
         marketTrends: historyData.marketTrends
-      });
+      }
+      
+      setSelectedData(updatedData)
 
     } catch (error) {
-      console.error('Error fetching information:', error);
-      alert('Fejl ved hentning af information');
+      console.error('Error fetching information:', error)
+      alert('Fejl ved hentning af information')
     } finally {
-      setIsFetchingInfo(false);
+      setIsFetchingInfo(false)
     }
   }
   
   async function handleEstimatePrice() {
-      if (!selectedData) return
-      
-      setIsLoading(true)
-      try {
-        const result = await estimatePrice(selectedData)
-        setEstimatedPrice(result)
-      } catch (error) {
-        console.error('Error estimating price:', error)
-        alert('Fejl ved prisberegning')
-      } finally {
-        setIsLoading(false)
-      }
+    if (!selectedData) return
+    
+    setIsLoading(true)
+    try {
+      const estimate = await estimatePrice(selectedData)
+      setEstimatedPrice(estimate)
+    } catch (error) {
+      console.error('Error estimating price:', error)
+      alert('Fejl ved prisberegning')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
     <div className="free-controls">
-      <div className="address-input">
-        <input
-          type="text"
-          placeholder="Søg på en adresse"
-          value={addressInput}
-          onChange={e => setAddressInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleFlyTo()}
-        />
-        <button onClick={handleFlyTo}>Søg</button>
+      {/* Combined search input with dropdown */}
+      <div className="address-search" ref={dropdownRef}>
+        <div className="search-input-container">
+          <input
+            type="text"
+            placeholder="Søg på en adresse i Danmark..."
+            value={addressInput}
+            onChange={e => setAddressInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && searchResults.length > 0) {
+                handleSelectResult(searchResults[0])
+              }
+            }}
+            className="address-input"
+          />
+          {isSearching && <div className="search-spinner">🔄</div>}
+        </div>
+        
+        {/* Search results dropdown */}
+        {showDropdown && searchResults.length > 0 && (
+          <div className="search-dropdown">
+            {searchResults.map((result, index) => (
+              <div
+                key={index}
+                className="search-result-item"
+                onClick={() => handleSelectResult(result)}
+              >
+                <div className="result-text">{result.place_name}</div>
+                <div className="result-context">{result.context?.find(c => c.id?.includes('country'))?.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {selectedData && (
@@ -215,7 +321,11 @@ function Free({ map }) {
           <h3>Ejendomsdata</h3>
           <label>
             Adresse:
-            <input type="text" value={selectedData.address} readOnly />
+            <input 
+              type="text" 
+              value={selectedData.address} 
+              onChange={e => setSelectedData({ ...selectedData, address: e.target.value })}
+            />
           </label>
           <label>
             Kvadratmeter:
@@ -227,11 +337,19 @@ function Free({ map }) {
           </label>
           <label>
             Postnummer:
-            <input type="text" value={selectedData.zip || ''} readOnly />
+            <input 
+              type="text" 
+              value={selectedData.zip || ''} 
+              onChange={e => setSelectedData({ ...selectedData, zip: e.target.value })}
+            />
           </label>
           <label>
             By:
-            <input type="text" value={selectedData.city || ''} readOnly />
+            <input 
+              type="text" 
+              value={selectedData.city || ''} 
+              onChange={e => setSelectedData({ ...selectedData, city: e.target.value })}
+            />
           </label>
           <label>
             Antal rum:
@@ -254,12 +372,11 @@ function Free({ map }) {
           <ul>
             {selectedData.salesHistory?.map((sale, i) => (
               <li key={i}>
-                {sale.date}: DKK {sale.price.toLocaleString()} {sale.type && `(${sale.type})`}
+                {sale.date}: DKK {sale.price?.toLocaleString()} {sale.type && `(${sale.type})`}
               </li>
             ))}
           </ul>
 
-          {/* Market trends if available */}
           {selectedData.marketTrends && (
             <div className="market-trends">
               <h4>Markedsdata</h4>
@@ -269,8 +386,7 @@ function Free({ map }) {
             </div>
           )}
 
-          {/* Button for fetching all information */}
-          <button onClick={handleFetchInformation} disabled={isFetchingInfo}>
+          <button onClick={() => handleFetchInformation()} disabled={isFetchingInfo}>
             {isFetchingInfo ? 'Henter information...' : 'Hent information'}
           </button>
 
@@ -278,7 +394,6 @@ function Free({ map }) {
             {isLoading ? 'Beregner...' : 'Beregn pris'}
           </button>
 
-          {/* Display estimated price */}
           {estimatedPrice && (
             <div className="estimated-price">
               <h4>Estimeret pris:</h4>
