@@ -1,0 +1,19 @@
+FROM python:3.11-alpine
+
+# Install Node.js
+RUN apk add --no-cache nodejs npm
+
+WORKDIR /app
+
+# Install Python dependencies first
+RUN pip install requests
+
+# Install Node.js dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy source code
+COPY . .
+
+EXPOSE 9000
+CMD ["node", "server.js"]

@@ -4,12 +4,16 @@ services:
   frontend:
     build: ./frontend
     container_name: frontend-container
+    environment:
+      - REACT_APP_API_URL=/api  # Frontend uses gateway, not direct backend
     networks:
       - app-network
 
   backend:
     build: ./backend
     container_name: backend-container
+    environment:
+      - SCRAPER_SERVICE_URL=http://scraper:9000
     networks:
       - app-network
 
@@ -17,10 +21,16 @@ services:
     build: ./gateway
     container_name: gateway-container
     ports:
-      - "80:80"
+      - "80:80"  # Only gateway is exposed
     depends_on:
       - frontend
       - backend
+    networks:
+      - app-network
+
+  scraper:
+    build: ./scraping2
+    container_name: scraper-container
     networks:
       - app-network
 
