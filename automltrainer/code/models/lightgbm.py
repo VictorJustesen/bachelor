@@ -119,3 +119,11 @@ class LightgbmConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             else:
                 self.kwargs[param] = value
         return self
+
+    def save_model(self, filepath):
+        """Save LightGBM model weights to text format"""
+        if hasattr(self, 'model') and self.model is not None:
+            weights_path = f"{filepath}_lightgbm.txt"
+            self.model.booster_.save_model(weights_path)
+            return weights_path
+        return None

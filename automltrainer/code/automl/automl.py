@@ -11,6 +11,8 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from models.model_registry import ModelRegistry
 import joblib
+import pickle
+import os
 from typing import Dict, Any, Optional, List
 
 class SimpleAutoML:
@@ -28,7 +30,92 @@ class SimpleAutoML:
         
         # Results storage
         self.results = {}
-    
+        
+        # Store data preprocessing info for later use
+        self.feature_columns = None
+        self.sanitized_feature_names = None
+        self.original_feature_names = None
+        
+    def save_model(self, filepath: str, include_results: bool = True):
+        """Save the trained AutoML model and preprocessing components to disk."""
+        if self.best_model is None:
+            raise ValueError("No model has been trained yet. Call run_automl() first.")
+        
+        # Create directory if it doesn't exist
+        base_dir = os.path.dirname(filepath) if os.path.dirname(filepath) else '.'
+        os.makedirs(base_dir, exist_ok=True)
+        
+        # Create model package with metadata
+        model_package = {
+            'model': self.best_model,
+            'feature_selector': self.feature_selector,
+            'scaler': self.scaler,
+            'target_col': self.target_col,
+            'feature_columns': self.feature_columns,
+            'model_metadata': {
+                'best_model_name': self.results.get('best_model', 'unknown'),
+                'save_timestamp': pd.Timestamp.now().isoformat()
+            }
+        }
+        
+        if include_results:
+            model_package['results'] = self.results
+        
+        # Save main package
+        main_path = f"{filepath}.pkl"
+        joblib.dump(model_package, main_path)
+        print(f"Model package saved to: {main_path}")
+        
+        # Let the model save its own weights if it wants to
+        if hasattr(self.best_model, 'save_model'):
+            try:
+                weights_path = self.best_model.save_model(filepath)
+                if weights_path:
+                    print(f"Model weights saved to: {weights_path}")
+            except Exception as e:
+                print(f"Warning: Could not save model weights: {e}")
+        
+        return main_path
+
+    def _detect_model_type(self, model):
+        """
+        Detect the type of model for proper saving/loading.
+        
+        Args:
+            model: The trained model object
+            
+        Returns:
+            str: Model type identifier
+        """
+        model_class = type(model).__name__
+        model_module = type(model).__module__
+        
+        # Check for specific model types
+        if 'sklearn' in model_module or 'linear_model' in model_module:
+            return 'sklearn'
+        elif 'lightgbm' in model_module or model_class == 'LGBMRegressor':
+            return 'lightgbm'
+        elif 'xgboost' in model_module or model_class == 'XGBRegressor':
+            return 'xgboost'
+        else:
+            # Check for common deep learning frameworks by trying imports
+            try:
+                import tensorflow as tf
+                if isinstance(model, tf.keras.Model):
+                    return 'tensorflow'
+            except ImportError:
+                pass
+            
+            try:
+                import torch
+                if isinstance(model, torch.nn.Module):
+                    return 'pytorch'
+            except ImportError:
+                pass
+            
+            # Default to sklearn-compatible
+            return 'sklearn'
+
     def run_automl(self, df: pd.DataFrame, 
                feature_selection_fn=None,
                hypertuning_fn=None,
@@ -161,6 +248,7 @@ class SimpleAutoML:
         sanitized_cols = {col: re.sub(r'[^a-zA-Z0-9_]', '_', col) for col in X.columns}
         X = X.rename(columns=sanitized_cols)
         self.sanitized_feature_names = X.columns.tolist()
+        self.feature_columns = self.sanitized_feature_names  # Store for saving
         # --- End of new code ---
         
         # Simple time series split for final train/test
@@ -222,6 +310,7 @@ class SimpleAutoML:
                        key=lambda x: valid_results[x]['metrics'].get(metric_key, float('inf')))
 
         return best_name, valid_results[best_name]
+    
     def _print_results(self, loss_fn):
         """Print results summary"""
         print("\n" + "="*60)

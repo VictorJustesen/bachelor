@@ -51,28 +51,14 @@ class BaseModelConfig(ABC):
         
         return model, y_pred
     
-    def get_error_score(self, X_train, y_train, X_test, y_test, metric='rmse', **model_params):
+    def save_model(self, filepath):
         """
-        Train model and return single error score
+        Optional method to save model weights/state in model-specific format.
         
         Args:
-            X_train, y_train: Training data
-            X_test, y_test: Test data
-            metric: Which metric to return ('rmse', 'mae', 'mse', 'r2')
-            **model_params: Model parameters
+            filepath (str): Base filepath (without extension)
             
         Returns:
-            Single error score
+            str or None: Path to saved weights file, or None if not implemented
         """
-        model, y_pred = self.train_and_predict(X_train, y_train, X_test, **model_params)
-        
-        if metric == 'rmse':
-            return np.sqrt(mean_squared_error(y_test, y_pred))
-        elif metric == 'mae':
-            return mean_absolute_error(y_test, y_pred)
-        elif metric == 'mse':
-            return mean_squared_error(y_test, y_pred)
-        elif metric == 'r2':
-            return r2_score(y_test, y_pred)
-        else:
-            raise ValueError(f"Unknown metric: {metric}")
+        return None  # Default implementation - no special saving needed

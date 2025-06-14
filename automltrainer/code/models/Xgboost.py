@@ -117,3 +117,11 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             else:
                 self.kwargs[param] = value
         return self
+    
+    def save_model(self, filepath):
+        """Save XGBoost model weights to JSON format"""
+        if hasattr(self, 'model') and self.model is not None:
+            weights_path = f"{filepath}_xgboost.json"
+            self.model.save_model(weights_path)
+            return weights_path
+        return None
