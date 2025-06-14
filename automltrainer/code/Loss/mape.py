@@ -1,8 +1,5 @@
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent))
 import numpy as np
-from Loss import Loss
+from .Loss import Loss
 from sklearn.metrics import mean_absolute_percentage_error
 
 class mape(Loss):

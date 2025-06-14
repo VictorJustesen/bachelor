@@ -2,17 +2,12 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import mean_squared_error
+from .hypertuning_interface import HypertuningInterface
+from .hypertuning_interface import HypertuningInterface
 
-class GridSearchTuner(BaseEstimator):
-    def __init__(self, estimator,  loss_fn, param_grid, cv=None, n_jobs=-1, verbose=0):
-        self.estimator = estimator
-        self.param_grid = param_grid
-        self.cv = cv  # CV splitter
-        self.n_jobs = n_jobs
-        self.verbose = verbose
-        self.best_params_ = None
-        self.best_score_ = None
-        self.loss_fn = loss_fn
+class GridSearchTuner(HypertuningInterface):
+    def __init__(self, estimator, loss_fn, param_grid, cv=None, n_jobs=-1, verbose=0):
+        super().__init__(estimator, loss_fn, param_grid, cv, n_jobs, verbose)
 
     def fit(self, X, y):
         """Fit with proper scaling per CV split"""

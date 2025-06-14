@@ -1,18 +1,12 @@
 import numpy as np
 from sklearn.base import BaseEstimator
 from helper.helper import helper
+from .hypertuning_interface import HypertuningInterface
 
-class LineSearchTuner(BaseEstimator):
+class LineSearchTuner(HypertuningInterface):
     def __init__(self, estimator, loss_fn, param_grid, cv=None, max_passes=2, n_jobs=-1, verbose=0):
-        self.estimator = estimator
-        self.param_grid = param_grid
-        self.cv = cv
-        self.loss_fn = loss_fn
+        super().__init__(estimator, loss_fn, param_grid, cv, n_jobs, verbose)
         self.max_passes = max_passes
-        self.n_jobs = n_jobs
-        self.verbose = verbose
-        self.best_params_ = None
-        self.best_score_ = None
 
     def fit(self, X, y):
         """Fit using line search, optimizing one parameter at a time."""

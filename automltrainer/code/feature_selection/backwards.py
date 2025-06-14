@@ -3,16 +3,12 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import TimeSeriesSplit
+from .feature_selection_interface import FeatureSelectionInterface
 
-class BackwardFeatureSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, estimator, loss_fn, cv=None, scoring='neg_mean_squared_error', verbose=0):
-        self.estimator = estimator  # The model to use for evaluation
-        self.cv = cv  # CV splitter (e.g., TimeSeriesSplit)
-        self.scoring = scoring
-        self.verbose = verbose
-        self.selected_features_ = None  # To store the final selected features
-        self.best_score_ = None
-        self.loss_fn = loss_fn
+class BackwardFeatureSelector(FeatureSelectionInterface):
+    def __init__(self, estimator, loss_fn, cv=None, verbose=0):
+        super().__init__(estimator, loss_fn, cv, verbose)
+        self.scoring = 'neg_mean_squared_error'  # Keep for compatibility
 
     def fit(self, X, y):
         """Fit using provided CV splitter with proper scaling per split"""
