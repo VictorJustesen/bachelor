@@ -1,38 +1,97 @@
 const axios = require('axios');
 
 const getPrediction = async (req, res) => {
-  // This is the data sent from the React frontend
-  const { sqm } = req.body;
-
-  // URL of your separate prediction API (where your ML model is served)
-  const PREDICTION_API_URL = "http://localhost:8001/make_prediction"; // Example URL
-
-  const modelFeatures = {
-    sqm,
-   
-    // ... you would add all other required features for your model here
-  };
-
   try {
-    // In a real scenario, you'd make a call to your ML service
-    // const response = await axios.post(PREDICTION_API_URL, modelFeatures);
-    // const predictionResult = response.data;
+    // Get the prediction API URL from environment variable or default
+    const PREDICTION_API_URL = process.env.PREDICTOR_API_URL || "http://predictor:8001";
+    
+    console.log('Received prediction request:', req.body);
 
-    // --- For now, we'll just return a fake result ---
-    console.log(`Simulating call to prediction API with data:`, modelFeatures);
-    const estimated_price = (sqm * 20000);
-    const predictionResult = {
-      estimated_price: Math.round(estimated_price / 1000) * 1000,
-      confidence_score: 0.85,
+    // First, get model info to understand expected features
+    const modelInfoResponse = await axios.get(`${PREDICTION_API_URL}/model-info/`);
+    const modelInfo = modelInfoResponse.data;
+    
+    console.log('Model expects features:', modelInfo.feature_columns);
+
+    // Extract features from request body
+    const requestData = req.body;
+    
+    // Build prediction payload with only the features the model expects
+    const predictionPayload = {};
+    
+    // Map common field names (adjust based on your model's feature names)
+    const fieldMapping = {
+      'sqm': 'sqm',
+      'rooms': 'rooms',
+      'bathrooms': 'bathrooms',
+      'year_built': 'year_built',
+      'location_score': 'location_score',
+      // Add more mappings based on your model's feature columns
     };
-    // --- End of fake result ---
 
-    res.json(predictionResult);
+    // Only include features that the model expects
+    modelInfo.feature_columns.forEach(feature => {
+      if (fieldMapping[feature] && requestData[fieldMapping[feature]] !== undefined) {
+        predictionPayload[feature] = parseFloat(requestData[fieldMapping[feature]]);
+      } else if (requestData[feature] !== undefined) {
+        predictionPayload[feature] = parseFloat(requestData[feature]);
+      } else {
+        // If feature is missing, you might want to use a default value
+        // or return an error
+        console.warn(`Missing feature: ${feature}`);
+        predictionPayload[feature] = 0; // Default value - adjust as needed
+      }
+    });
+
+    console.log('Sending to prediction API:', predictionPayload);
+
+    // Make prediction request
+    const predictionResponse = await axios.post(
+      `${PREDICTION_API_URL}/predict/`, 
+      predictionPayload,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000 // 10 second timeout
+      }
+    );
+
+    const predictionResult = predictionResponse.data;
+    
+    console.log('Prediction result:', predictionResult);
+
+    // Format response for frontend
+    res.json({
+      estimated_price: Math.round(predictionResult.prediction),
+      target_column: predictionResult.target_column,
+      model_type: predictionResult.model_type,
+      confidence_score: 0.85, // You might want to add this to your ML model
+      features_used: Object.keys(predictionPayload)
+    });
 
   } catch (error) {
     console.error("Error calling prediction service:", error.message);
-    res.status(500).json({ error: "Failed to get prediction from the ML service." });
+    
+    if (error.code === 'ECONNREFUSED') {
+      res.status(503).json({ 
+        error: "Prediction service is unavailable. Please try again later." 
+      });
+    } else if (error.response) {
+      // The prediction API returned an error
+      console.error("Prediction API error:", error.response.data);
+      res.status(error.response.status).json({ 
+        error: error.response.data.detail || "Prediction failed" 
+      });
+    } else {
+      res.status(500).json({ 
+        error: "Failed to get prediction from the ML service." 
+      });
+    }
   }
 };
 
-module.exports = { getPrediction };
+
+module.exports = { 
+  getPrediction,
+};

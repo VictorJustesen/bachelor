@@ -1,0 +1,24 @@
+# Use a Python base image
+FROM python:3.11-slim
+
+# Set the working directory
+WORKDIR /app
+
+# --- ADD AUTOMLTRAINER CODE TO THE CONTAINER ---
+# Copy the source code that defines your models and helpers
+COPY automltrainer/code /app/automltrainer_lib
+
+# --- INSTALL REQUIREMENTS ---
+# Copy and install requirements for the predictor API itself
+COPY predictor/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- ADD PREDICTOR API CODE ---
+# Copy the application code from the predictor directory
+COPY predictor/ .
+
+# Expose the port the app runs on
+EXPOSE 8001
+
+# Command to run the application
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001"]

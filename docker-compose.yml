@@ -14,6 +14,7 @@ services:
     container_name: backend-container
     environment:
       - SCRAPER_SERVICE_URL=http://scraper:9000
+      - PREDICTOR_SERVICE_URL=http://predictor:8001
     networks:
       - app-network
 
@@ -33,6 +34,20 @@ services:
     container_name: scraper-container
     networks:
       - app-network
+
+  predictor:
+    build:
+      context: .
+      dockerfile: predictor/Dockerfile
+    container_name: predictor-container
+    ports:
+      - "8001:8001"  # Add this line to expose the port
+    networks:
+      - app-network
+    environment:
+      # This is the crucial line that fixes the ModuleNotFoundError
+      - PYTHONPATH=/app/automltrainer_lib
+    
 
 networks:
   app-network:

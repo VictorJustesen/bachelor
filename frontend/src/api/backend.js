@@ -1,6 +1,7 @@
 const API_BASE_URL = '/api'; // Your backend URL
 
 async function fetchFromBackend(endpoint, options) {
+     console.log(`Fetching from backend: ${API_BASE_URL}/${endpoint}`, options);
      const res = await fetch(`${API_BASE_URL}/${endpoint}`, options);
      if (!res.ok) {
          throw new Error(`Failed to fetch from backend: ${endpoint}`);
@@ -53,11 +54,21 @@ export async function getPropertyHistory(address, zip) {
 }
 
 export async function estimatePrice(buildingDetails) {
-    // This still uses the prediction service
-    const estimate = await fetchFromBackend('predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildingDetails)
-     });
-    return estimate;
+    try {
+        console.log('Calling backend for price estimation:', buildingDetails);
+        
+        // Change from 'predictor/predict' to 'predict' to go through backend
+        const estimate = await fetchFromBackend('predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildingDetails)
+        });
+        
+        console.log('Backend response:', estimate);
+        return estimate;
+        
+    } catch (error) {
+        console.error('Error estimating price:', error);
+        throw error;
+    }
 }
