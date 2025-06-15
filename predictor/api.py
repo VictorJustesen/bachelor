@@ -103,8 +103,9 @@ def predict(data: DynamicPredictionInput):
                 # --- END OF WORKAROUND ---
         else:
             input_scaled = input_df.values
+
         
-        prediction = model.predict(input_scaled)
+        prediction = model.predict(np.nan_to_num(input_scaled))
         
         # Return the result
         return {

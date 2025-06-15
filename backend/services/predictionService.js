@@ -3,7 +3,7 @@ const axios = require('axios');
 const getPrediction = async (req, res) => {
   try {
     // Get the prediction API URL from environment variable or default
-    const PREDICTION_API_URL = process.env.PREDICTOR_API_URL || "http://predictor:8001";
+    const PREDICTION_API_URL = process.env.PREDICTOR_SERVICE_URL || "http://predictor:8001";
     
     console.log('Received prediction request:', req.body);
 
@@ -20,12 +20,14 @@ const getPrediction = async (req, res) => {
     const predictionPayload = {};
     
     // Map common field names (adjust based on your model's feature names)
+    const currentYear = new Date().getFullYear();
+    const daysSince1992 = Math.floor((Date.now() - new Date('1992-01-01').getTime()) / (1000 * 60 * 60 * 24));
+
     const fieldMapping = {
-      'sqm': 'sqm',
-      'rooms': 'rooms',
-      'bathrooms': 'bathrooms',
-      'year_built': 'year_built',
-      'location_score': 'location_score',
+      'm2': 'sqn',
+      'V_r_': 'rooms',
+      'age': (requestData) => currentYear - parseInt(requestData['age'], 10),
+      'date_ordinal': daysSince1992,
       // Add more mappings based on your model's feature columns
     };
 
