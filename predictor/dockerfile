@@ -11,7 +11,7 @@ COPY automltrainer/code /app/automltrainer_lib
 # --- INSTALL REQUIREMENTS ---
 # Copy and install requirements for the predictor API itself
 COPY predictor/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # --- ADD PREDICTOR API CODE ---
 # Copy the application code from the predictor directory

@@ -77,44 +77,7 @@ class SimpleAutoML:
         
         return main_path
 
-    def _detect_model_type(self, model):
-        """
-        Detect the type of model for proper saving/loading.
-        
-        Args:
-            model: The trained model object
-            
-        Returns:
-            str: Model type identifier
-        """
-        model_class = type(model).__name__
-        model_module = type(model).__module__
-        
-        # Check for specific model types
-        if 'sklearn' in model_module or 'linear_model' in model_module:
-            return 'sklearn'
-        elif 'lightgbm' in model_module or model_class == 'LGBMRegressor':
-            return 'lightgbm'
-        elif 'xgboost' in model_module or model_class == 'XGBRegressor':
-            return 'xgboost'
-        else:
-            # Check for common deep learning frameworks by trying imports
-            try:
-                import tensorflow as tf
-                if isinstance(model, tf.keras.Model):
-                    return 'tensorflow'
-            except ImportError:
-                pass
-            
-            try:
-                import torch
-                if isinstance(model, torch.nn.Module):
-                    return 'pytorch'
-            except ImportError:
-                pass
-            
-            # Default to sklearn-compatible
-            return 'sklearn'
+
 
     def run_automl(self, df: pd.DataFrame, 
                feature_selection_fn=None,
@@ -219,6 +182,7 @@ class SimpleAutoML:
         best_model_name, best_result = self._get_best_model(model_results , loss_fn)
         self.best_model = best_result['model']
         self.feature_selector = best_result.get('feature_selector')
+        self.scaler = best_result.get('scaler')
         
         self.results = {
             'models': model_results,
@@ -268,7 +232,7 @@ class SimpleAutoML:
         
         # Scale final train/test data
         data_scaler = helper()
-        X_train_scaled, X_test_scaled = data_scaler.scale(X_train, X_test)
+        X_train_scaled, X_test_scaled, fitted_scaler = data_scaler.scale_with_scaler(X_train, X_test)
         
         # Train model on scaled data
         model, y_pred = model_config.train_and_predict(X_train_scaled, y_train, X_test_scaled, loss_fn=loss_fn, **params)
@@ -284,9 +248,9 @@ class SimpleAutoML:
             'model': model,
             'params': params,
             'metrics': metrics,
-            'model_name': model_config.get_model_name()
+            'model_name': model_config.get_model_name(),
+            'scaler': fitted_scaler
         }
-        
         if cv_score is not None:
             result['cv_score'] = cv_score
             
