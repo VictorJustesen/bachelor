@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { loginUser, getUserInfo } = require('../services/userService');
+const userRoutes = require('./users');
 const { getPrediction } = require('../services/predictionService');
 const { getBuildingInfo, getPropertyHistory } = require('../services/scrapeService');
+const { optionalAuth } = require('../middleware/auth');
 
 // User Service Routes
-router.post('/users/login', loginUser);
-router.get('/users/:userId', getUserInfo); // Example: /api/users/1
+router.use('/users', userRoutes);
 
-// Prediction Service Route
-router.post('/predict', getPrediction);
+// Prediction Service Route (with optional authentication to track user predictions)
+router.post('/predict', optionalAuth, getPrediction);
 
 // Scrape Service Routes
 router.post('/scrape/building-info', getBuildingInfo);

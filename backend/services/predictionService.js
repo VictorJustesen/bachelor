@@ -1,4 +1,7 @@
 const axios = require('axios');
+const { sequelize } = require('../config/database');
+const userService = require('./userService');
+
 
 const getPrediction = async (req, res) => {
   try {
@@ -24,27 +27,18 @@ const getPrediction = async (req, res) => {
     predictionPayload['date_ordinal'] = Math.floor((Date.now() - new Date('1992-01-01').getTime()) / (1000 * 60 * 60 * 24));
 
     // --- 3. Handle one-hot encoded 'building type' features ---
-    // Example: if buildingType is "Villa", this sets `btype_Villa` to 1.
     const buildingType = requestData.buildingType;
     const btypeFeature = `btype_${buildingType.replace(/\s/g, '_')}`;
     if (predictionPayload.hasOwnProperty(btypeFeature)) {
       predictionPayload[btypeFeature] = 1;
     }
 
-    // --- 4. Handle one-hot encoded 'region' features (NEEDS YOUR LOGIC) ---
-    // You must implement a way to map zip code/city to a region name.
-    // This is just a placeholder:
+    // --- 4. Handle one-hot encoded 'region' features ---
     const regionName = 'Nordsj_lland'; // <-- Replace with your logic to get this from zip '2960'
     const regionFeature = `omr_de_${regionName}`;
     if (predictionPayload.hasOwnProperty(regionFeature)) {
         predictionPayload[regionFeature] = 1;
     }
-
-    // --- 5. Handle complex/lookup features (NEEDS YOUR LOGIC) ---
-    // These require looking up historical data, which is a larger task.
-    // For now, they will remain 0, but this is where you would calculate them.
-    // predictionPayload['pris_pr_m2_mean_365D_postnummer'] = await getAvgPriceForZip(requestData.zip);
-    // predictionPayload['mean_of_5_neighbors_pris'] = await getNeighborPrices(requestData.address);
 
     console.log('Sending to prediction API:', predictionPayload);
 
@@ -57,28 +51,12 @@ const getPrediction = async (req, res) => {
       }
     );
 
-    res.json({
-        estimated_price: Math.round(predictionResponse.data.prediction),
-        ...predictionResponse.data
-    });
+    const prediction = predictionResponse.data;
+    res.json(prediction);
 
   } catch (error) {
-    // ... error handling ...
-    console.error("Error calling prediction service:", error.message);
-    if (error.code === 'ECONNREFUSED') {
-      res.status(503).json({
-        error: "Prediction service is unavailable. Please try again later."
-      });
-    } else if (error.response) {
-      console.error("Prediction API error:", error.response.data);
-      res.status(error.response.status).json({
-        error: error.response.data.detail || "Prediction failed"
-      });
-    } else {
-      res.status(500).json({
-        error: "Failed to get prediction from the ML service."
-      });
-    }
+    console.error('Error in getPrediction:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

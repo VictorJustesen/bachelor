@@ -1,18 +1,28 @@
 {
-  "name": "real-estate-backend",
+  "name": "realestate-backend",
   "version": "1.0.0",
-  "description": "Backend for the Real Estate Calculator",
+  "description": "",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:reset": "node scripts/resetDatabase.js",
+    "db:sync": "node -e \"require('./config/database').sync({ alter: true }).then(() => process.exit(0))\""
   },
   "dependencies": {
-    "axios": "^1.6.8",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "axios": "^1.6.0",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "sequelize": "^6.35.0",
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
-  }
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

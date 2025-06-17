@@ -1,0 +1,24 @@
+# Database Backups
+
+This directory contains database backup files created by the management script.
+
+Backup files are named with timestamp: `backup_YYYYMMDD_HHMMSS.sql`
+
+## Usage
+
+Create backup:
+```bash
+./database/manage-db.sh backup
+```
+
+Restore from backup:
+```bash
+./database/manage-db.sh restore ./database/backups/backup_20231201_120000.sql
+```
+
+## Important Notes
+
+- Backups are created in SQL format compatible with PostgreSQL
+- Keep regular backups before major changes
+- Backup files can be version controlled if needed (but watch file sizes)
+- Consider automated backup scheduling for production

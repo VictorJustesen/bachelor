@@ -1,11 +1,43 @@
 version: '3.8'
 
 services:
+  database:
+    build: ./database
+    container_name: database-container
+    environment:
+      - POSTGRES_DB=realestate_db
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+    ports:
+      - "5432:5432"  # Expose for development access
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d realestate_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   frontend:
     build: ./frontend
     container_name: frontend-container
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+      - ./frontend/package.json:/app/package.json
+      - /app/node_modules  # This prevents overwriting node_modules
     environment:
-      - REACT_APP_API_URL=/api  # Frontend uses gateway, not direct backend
+      - CHOKIDAR_USEPOLLING=true  # Enables hot reload in Docker
+      - WATCHPACK_POLLING=true
+      - FAST_REFRESH=true
+      - WDS_SOCKET_PORT=3000
+      - GENERATE_SOURCEMAP=false
+    stdin_open: true
+    tty: true
     networks:
       - app-network
 
@@ -15,6 +47,15 @@ services:
     environment:
       - SCRAPER_SERVICE_URL=http://scraper:9000
       - PREDICTOR_SERVICE_URL=http://predictor:8001
+      - ENVIRONMENT=dev
+      - DB_HOST=database
+      - DB_PORT=5432
+      - DB_NAME=realestate_db
+      - DB_USER=dev_user
+      - DB_PASSWORD=dev_password
+    depends_on:
+      database:
+        condition: service_healthy
     networks:
       - app-network
 
@@ -52,3 +93,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres_data:
