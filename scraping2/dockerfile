@@ -1,19 +1,21 @@
-FROM python:3.11-alpine
-
-# Install Node.js
-RUN apk add --no-cache nodejs npm
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Python dependencies first
-RUN pip install requests
+# Install requirements directly in Dockerfile
+RUN pip install --no-cache-dir \
+    flask \
+    flask-cors \
+    requests \
+    beautifulsoup4 \
+    lxml \
+    pandas \
+    numpy \
+    urllib3
 
-# Install Node.js dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy source code
+# Copy application files
 COPY . .
 
 EXPOSE 9000
-CMD ["node", "server.js"]
+
+CMD ["python", "server.py"]
