@@ -1,25 +1,40 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import json
-import sys
 import os
+import sys
+import random
+import re
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import uvicorn
 
-# Add current directory to Python path
 sys.path.append(os.path.dirname(__file__))
 from property_scraper import scrape_property_data
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 PORT = int(os.environ.get('PORT', 9000))
 
 SERVICE_USERNAME = "XEVPPQIYSU"
 SERVICE_PASSWORD = "Luffygear3!"
 
-@app.route('/scrape/building-info', methods=['POST'])
-def scrape_building_info():
-    data = request.get_json()
-    address = data.get('address')
+class ScrapeBuildingRequest(BaseModel):
+    address: str
+
+class ScrapeHistoryRequest(BaseModel):
+    address: str
+    zip: str
+
+@app.post('/scrape/building-info')
+async def scrape_building_info(req: ScrapeBuildingRequest):
+    address = req.address
     print(f'Scraping building info for: {address}')
     
     try:
@@ -28,7 +43,7 @@ def scrape_building_info():
         if python_result.get('success') and python_result.get('data'):
             data = python_result['data']
             
-            return jsonify({
+            return {
                 'address': data.get('address'),
                 'sqm': extract_sqm_from_data(data.get('apartment_data')),
                 'rooms': extract_rooms_from_data(data.get('apartment_data')),
@@ -42,20 +57,19 @@ def scrape_building_info():
                 'apartment_id': data.get('apartment_id'),
                 'adgangsadresse_id': data.get('adgangsadresse_id'),
                 'bfe_number': data.get('bfe_number')
-            })
+            }
         else:
             print('Python scraper returned no data, using mock data')
-            return jsonify(generate_mock_building_data(address))
+            return generate_mock_building_data(address)
             
     except Exception as error:
         print(f'Property scraping failed: {error}')
-        return jsonify(generate_mock_building_data(address))
+        return generate_mock_building_data(address)
 
-@app.route('/scrape/property-history', methods=['POST'])
-def scrape_property_history():
-    data = request.get_json()
-    address = data.get('address')
-    zip_code = data.get('zip')
+@app.post('/scrape/property-history')
+async def scrape_property_history(req: ScrapeHistoryRequest):
+    address = req.address
+    zip_code = req.zip
     
     try:
         print(f'Scraping property history for: {address}, {zip_code}')
@@ -65,15 +79,14 @@ def scrape_property_history():
         if python_result.get('success') and python_result.get('data'):
             data = python_result['data']
             
-            return jsonify({
+            return {
                 'address': data.get('address'),
                 'zip': extract_zip_from_address(data.get('address')),
                 'salesHistory': data.get('sales_history', []),
                 'source': 'danish_property_scraper'
-            })
+            }
         else:
-            import random
-            return jsonify({
+            return {
                 'address': address,
                 'zip': zip_code,
                 'salesHistory': [
@@ -83,11 +96,11 @@ def scrape_property_history():
                     }
                 ],
                 'source': 'mock_fallback'
-            })
+            }
             
     except Exception as error:
         print(f'Property history scraping failed: {error}')
-        return jsonify({'error': 'Failed to get property history'}), 500
+        raise HTTPException(status_code=500, detail='Failed to get property history')
 
 def call_property_scraper(address):
     try:
@@ -128,7 +141,6 @@ def extract_year_from_data(building_data):
 def extract_zip_from_address(address):
     if not address:
         return None
-    import re
     zip_match = re.search(r'\b\d{4}\b', address)
     return zip_match.group(0) if zip_match else None
 
@@ -153,7 +165,6 @@ def extract_building_type(building_data):
     return 'Residential Building'
 
 def generate_mock_building_data(address):
-    import random
     return {
         'address': address,
         'sqm': random.randint(50, 250),
@@ -169,4 +180,4 @@ def generate_mock_building_data(address):
 
 if __name__ == '__main__':
     print(f'Scraping server running on port {PORT}')
-    app.run(host='0.0.0.0', port=PORT, debug=True)
+    uvicorn.run(app, host='0.0.0.0', port=PORT)
