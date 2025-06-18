@@ -1,12 +1,6 @@
 -- Initialize the database schema
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS realestate_db;
-
--- Connect to the database
-\c realestate_db;
-
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -23,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- User sessions table (for session management)
 CREATE TABLE IF NOT EXISTS user_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     session_token VARCHAR(255) UNIQUE NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -32,7 +26,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 -- User preferences table (for storing user-specific settings)
 CREATE TABLE IF NOT EXISTS user_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     preference_key VARCHAR(100) NOT NULL,
     preference_value TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -43,7 +37,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 -- Property searches table (to track user searches)
 CREATE TABLE IF NOT EXISTS property_searches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     search_parameters JSONB,
     prediction_result JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -87,23 +81,23 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers to automatically update updated_at
-CREATE TRIGGER update_users_updated_at 
-    BEFORE UPDATE ON users 
-    FOR EACH ROW 
+CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_searches_updated_at 
-    BEFORE UPDATE ON searches 
-    FOR EACH ROW 
+CREATE TRIGGER update_searches_updated_at
+    BEFORE UPDATE ON searches
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_predictions_updated_at 
-    BEFORE UPDATE ON predictions 
-    FOR EACH ROW 
+CREATE TRIGGER update_predictions_updated_at
+    BEFORE UPDATE ON predictions
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert a test user to verify everything works
-INSERT INTO users (username, email, password_hash, first_name, last_name) 
+INSERT INTO users (username, email, password_hash, first_name, last_name)
 VALUES ('testuser', 'test@example.com', '$2b$10$example', 'Test', 'User')
 ON CONFLICT (username) DO NOTHING;
