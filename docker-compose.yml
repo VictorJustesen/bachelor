@@ -47,6 +47,10 @@ services:
       - DB_NAME=realestate_db
       - DB_USER=dev_user
       - DB_PASSWORD=dev_password
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
     depends_on:
       database:
         condition: service_healthy

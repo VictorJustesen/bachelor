@@ -169,4 +169,4 @@ def generate_mock_building_data(address):
 
 if __name__ == '__main__':
     print(f'Scraping server running on port {PORT}')
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    app.run(host='0.0.0.0', port=PORT, debug=True)

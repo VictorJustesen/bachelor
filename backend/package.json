@@ -10,17 +10,17 @@
     "db:sync": "node -e \"require('./config/database').sync({ alter: true }).then(() => process.exit(0))\""
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
     "axios": "^1.6.0",
     "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "sequelize": "^6.35.0",
     "pg": "^8.11.3",
-    "pg-hstore": "^2.3.4"
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.35.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.10"
   },
   "keywords": [],
   "author": "",
