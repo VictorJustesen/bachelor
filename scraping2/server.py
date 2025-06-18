@@ -34,8 +34,10 @@ class ScrapeHistoryRequest(BaseModel):
 
 @app.post('/scrape/building-info')
 async def scrape_building_info(req: ScrapeBuildingRequest):
+    
     address = req.address
     print(f'Scraping building info for: {address}')
+    print("hey")
     
     try:
         python_result = call_property_scraper(address)

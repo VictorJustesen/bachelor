@@ -9,9 +9,9 @@ services:
       - POSTGRES_USER=dev_user
       - POSTGRES_PASSWORD=dev_password
     ports:
-      - "5432:5432"  # Expose for development access
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+     - ./database/database-data:/var/lib/postgresql/data
     networks:
       - app-network
     healthcheck:
@@ -20,7 +20,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # In your docker-compose.yml
   frontend:
     build: ./frontend
     container_name: frontend-container
@@ -49,7 +48,7 @@ services:
       - DB_PASSWORD=dev_password
     volumes:
       - ./backend:/app:cached
-      - /app/node_modules 
+      - /app/node_modules
     command: npm run dev
     depends_on:
       database:
@@ -61,7 +60,7 @@ services:
     build: ./gateway
     container_name: gateway-container
     ports:
-      - "80:80"  # Only gateway is exposed
+      - "80:80"
     depends_on:
       - frontend
       - backend
@@ -71,6 +70,10 @@ services:
   scraper:
     build: ./scraping2
     container_name: scraper-container
+    command: uvicorn server:app --host 0.0.0.0 --port 9000 --reload
+    volumes:
+      - ./scraping2:/app
+    working_dir: /app
     networks:
       - app-network
 
@@ -79,14 +82,17 @@ services:
       context: .
       dockerfile: predictor/Dockerfile
     container_name: predictor-container
+    command: uvicorn api:app --host 0.0.0.0 --port 8001 --reload
     ports:
-      - "8001:8001"  # Add this line to expose the port
+      - "8001:8001"
+    volumes:
+      - ./predictor:/app
+      - ./automltrainer:/app/automltrainer_lib
+    working_dir: /app
     networks:
       - app-network
     environment:
-      # This is the crucial line that fixes the ModuleNotFoundError
-      - PYTHONPATH=/app/automltrainer_lib
-    
+      - PYTHONPATH=/app/automltrainer_lib/code
 
 networks:
   app-network:
