@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize'); // Add this import
 const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -9,11 +10,18 @@ class UserService {
   async register(userData) {
     try {
       const { username, email, password, first_name, last_name } = userData;
+      console.log('Registering user with data:', { username, email,password, first_name, last_name }); // Debug log
+      // Add validation
+      if (!username || !email || !password) {
+        throw new Error('Username, email, and password are required');
+      }
       
-      // Check if user already exists
+      console.log('Registering user with data:', { username, email, first_name, last_name }); // Debug log
+      
+      // Check if user already exists - Fix the syntax
       const existingUser = await User.findOne({
         where: {
-          $or: [{ username }, { email }]
+          [Op.or]: [{ username }, { email }]  // Use Op.or instead of $or
         }
       });
       
@@ -60,6 +68,13 @@ class UserService {
 
   async login(username, password) {
     try {
+      // Add validation
+      if (!username || !password) {
+        throw new Error('Username and password are required');
+      }
+      
+      console.log('Login attempt for username:', username); // Debug log
+      
       // Find user
       const user = await User.findOne({
         where: { username, is_active: true }

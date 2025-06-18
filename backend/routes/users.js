@@ -7,18 +7,19 @@ const router = express.Router();
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, first_name, last_name } = req.body;
-    
+    const { username, email, password, first_name, last_name } = req.body;
+    console.log('Registering user with data:', { username, email,password, first_name, last_name }); // Debug log
     // Basic validation
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required' });
     }
     
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
-    const user = await userService.registerUser({
+    const user = await userService.register({
+      username,
       email,
       password,
       first_name,
@@ -37,14 +38,14 @@ router.post('/register', async (req, res) => {
 // Login user
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const result = await userService.loginUser(email, password);
-    
+    const result = await userService.login(username, password);
+
     res.json({
       message: 'Login successful',
       user: result.user,

@@ -45,7 +45,7 @@ function Start({ onEnterFree }) {
         setUser(data.user);
         setShowLogin(false);
       } else {
-        console.log('Login failed with status:', response.status);
+        console.log('Login failed with status:', await response.text());
         alert('Login failed');
       }
     } catch (error) {
@@ -71,6 +71,14 @@ function Start({ onEnterFree }) {
           last_name: formData.lastName
         }),
       });
+      
+      console.log('Registering user with data:', {
+        username: formData.username,
+        email: formData.email,
+        first_name: formData.firstName,
+        last_name: formData.lastName
+      });
+      console.log('Response status:', response.text());
 
       if (response.ok) {
         const data = await response.json();
@@ -95,7 +103,7 @@ function Start({ onEnterFree }) {
 
   return (
     <div className="start-container">
-      <div className="start-title">Hot reload test: {showLogin.valueOf().toString()}</div>
+      <div className="start-title">Hot reloadww test: {showLogin.valueOf().toString()}</div>
       <h1 className="start-title">Bolig beregner</h1>
       
       {!user ? (

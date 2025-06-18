@@ -16,10 +16,11 @@ services:
       - app-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dev_user -d realestate_db"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 3s
       retries: 5
 
+  # In your docker-compose.yml
   frontend:
     build: ./frontend
     container_name: frontend-container
@@ -29,13 +30,6 @@ services:
       - ./frontend/src:/app/src:cached
       - ./frontend/public:/app/public:cached
       - ./frontend/package.json:/app/package.json
-      - /app/node_modules  # This prevents overwriting node_modules
-    environment:
-      - CHOKIDAR_USEPOLLING=true  # Enables hot reload in Docker
-      - WATCHPACK_POLLING=true
-      - FAST_REFRESH=true
-      - WDS_SOCKET_PORT=3000
-      - GENERATE_SOURCEMAP=false
     stdin_open: true
     tty: true
     networks:
