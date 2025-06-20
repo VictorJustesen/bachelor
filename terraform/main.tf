@@ -1,0 +1,68 @@
+# main.tf makes the aks and acr 
+
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~>3.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~>2.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "rg" {
+  name     = "bachelorrg"
+  location = "Sweden Central"
+}
+
+resource "azurerm_container_registry" "acr" {
+  name                = "bacheloracr"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "Standard"
+  admin_enabled       = true
+}
+
+resource "azurerm_kubernetes_cluster" "aks" {
+  name                = "bacheloraks"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  dns_prefix          = "bachelorproject"
+
+  default_node_pool {
+    name       = "default"
+    node_count = 1
+    vm_size    = "Standard_B2s"
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  network_profile {
+    network_plugin = "kubenet"
+    service_cidr   = "10.0.0.0/16"
+    dns_service_ip = "10.0.1.10"
+    docker_bridge_cidr = "172.17.0.1/16"
+  }
+}
+
+provider "kubernetes" {
+  host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
+  client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
+  client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
+  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
+}
+
+resource "kubernetes_namespace" "app_ns" {
+  metadata {
+    name = "bachelor-app"
+  }
+}
