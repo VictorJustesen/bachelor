@@ -542,18 +542,9 @@ if __name__ == '__main__':
     
     try:
         # Get data for the specific apartment
-        specific_result = get_specific_apartment_data(address_to_search, service_user_name, service_user_password)
+        specific_result = get_property_data_enhanced(address_to_search, service_user_name, service_user_password)
         
-        if specific_result:
-            print(f"\n🎯 SPECIFIC APARTMENT RESULT:")
-            if specific_result['specific_apartment']:
-                for unit in specific_result['specific_apartment']:
-                    print(f"  🏠 This apartment: {unit.get('enh027ArealTilBeboelse')}m², {unit.get('enh031AntalVærelser')} rooms")
-            
-            if specific_result['building_context']['building_summary']:
-                summary = specific_result['building_context']['building_summary']
-                print(f"  🏢 Building has {summary['total_units']} total units")
-                print(f"  📊 Average apartment size: {summary['avg_area']:.1f}m²")
+        
         
     except Exception as e:
         print(f"💥 Error: {e}")

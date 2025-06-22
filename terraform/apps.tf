@@ -35,9 +35,14 @@ resource "kubernetes_deployment" "backend" {
             name  = "ENVIRONMENT"
             value = "dev"
           }
-          env {
-            name  = "DB_HOST"
-            value = "database" # Kubernetes service name for the database
+           env {
+            name = "DB_HOST"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.db_secret.metadata.0.name
+                key  = "POSTGRES_HOST"
+              }
+            }
           }
           env {
             name  = "DB_PORT"
@@ -185,7 +190,7 @@ resource "kubernetes_deployment" "predictor" {
           }
            env {
             name  = "PYTHONPATH"
-            value = "/app/automltrainer_lib/code"
+            value = "/app/automltrainer_lib"
           }
         }
       }

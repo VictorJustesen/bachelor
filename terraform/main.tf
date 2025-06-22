@@ -1,5 +1,3 @@
-# main.tf makes the aks and acr 
-
 terraform {
   required_providers {
     azurerm = {
@@ -30,6 +28,15 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled       = true
 }
 
+# 1. Add this new resource to create the Log Analytics Workspace
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "bachelor-logs-workspace"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
 resource "azurerm_kubernetes_cluster" "aks" {
   name                = "bacheloraks"
   location            = azurerm_resource_group.rg.location
@@ -44,6 +51,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
   identity {
     type = "SystemAssigned"
+  }
+
+  # 2. Add this block to link your AKS cluster to the Log Analytics Workspace
+  oms_agent {
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   }
 
   network_profile {
@@ -65,4 +77,10 @@ resource "kubernetes_namespace" "app_ns" {
   metadata {
     name = "bachelor-app"
   }
+}
+
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  scope                = azurerm_container_registry.acr.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
 }

@@ -1,105 +1,47 @@
-# database.tf
+# 1. Create the Azure Database for PostgreSQL server
+resource "azurerm_postgresql_flexible_server" "db_server" {
+  name                   = "bachelor-postgres-server" # Choose a unique name
+  resource_group_name    = azurerm_resource_group.rg.name
+  location               = azurerm_resource_group.rg.location
+  zone                   = "1" # Add this line to pin the zone
+  version                = "13"
+  sku_name               = "B_Standard_B1ms" # This SKU is eligible for the Azure Free Tier
 
+  administrator_login    = "dev_user"
+  administrator_password = "YourSecurePassword123!" # Hardcoded as requested
+  storage_mb             = 32768
+  
+  public_network_access_enabled = true
+}
+
+# 2. Create the specific database within the server
+resource "azurerm_postgresql_flexible_server_database" "db" {
+  name      = "realestate_db"
+  server_id = azurerm_postgresql_flexible_server.db_server.id
+  charset   = "UTF8"
+  collation = "en_US.utf8"
+}
+
+# 3. Create a firewall rule to allow Azure services to connect
+resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_all_dev" {
+  name             = "allow-all-ips-for-dev"
+  server_id        = azurerm_postgresql_flexible_server.db_server.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
+}
+
+# 4. Update the Kubernetes secret with the new Azure DB connection info
 resource "kubernetes_secret" "db_secret" {
   metadata {
     name      = "db-secret"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
   }
   data = {
-    POSTGRES_USER     = "dev_user"
-    POSTGRES_PASSWORD = "dev_password"
-    POSTGRES_DB       = "realestate_db"
+    # Point to the new Azure PostgreSQL server FQDN (fully qualified domain name)
+    POSTGRES_HOST     = azurerm_postgresql_flexible_server.db_server.fqdn
+    POSTGRES_USER     = azurerm_postgresql_flexible_server.db_server.administrator_login
+    POSTGRES_PASSWORD = azurerm_postgresql_flexible_server.db_server.administrator_password
+    POSTGRES_DB       = azurerm_postgresql_flexible_server_database.db.name
   }
   type = "Opaque"
-}
-
-resource "kubernetes_persistent_volume_claim" "db_pvc" {
-  metadata {
-    name      = "db-pvc"
-    namespace = kubernetes_namespace.app_ns.metadata.0.name
-  }
-  spec {
-    access_modes = ["ReadWriteOnce"]
-    resources {
-      requests = {
-        storage = "1Gi"
-      }
-    }
-  }
-}
-
-resource "kubernetes_deployment" "database" {
-  metadata {
-    name      = "database-deployment"
-    namespace = kubernetes_namespace.app_ns.metadata.0.name
-  }
-  spec {
-    replicas = 1
-    selector {
-      match_labels = {
-        app = "database"
-      }
-    }
-    template {
-      metadata {
-        labels = {
-          app = "database"
-        }
-      }
-      spec {
-        container {
-          name  = "database-container"
-          image = "${azurerm_container_registry.acr.login_server}/database:latest"
-
-          env_from {
-            secret_ref {
-              name = kubernetes_secret.db_secret.metadata.0.name
-            }
-          }
-
-          port {
-            container_port = 5432
-          }
-
-          volume_mount {
-            mount_path = "/var/lib/postgresql/data"
-            name       = "db-storage"
-          }
-
-          readiness_probe {
-            exec {
-              command = ["pg_isready", "-U", "dev_user", "-d", "realestate_db"]
-            }
-            initial_delay_seconds = 10
-            period_seconds      = 10
-            timeout_seconds     = 3
-            failure_threshold   = 5
-          }
-        }
-        volume {
-          name = "db-storage"
-          persistent_volume_claim {
-            claim_name = kubernetes_persistent_volume_claim.db_pvc.metadata.0.name
-          }
-        }
-      }
-    }
-  }
-}
-
-resource "kubernetes_service" "database_service" {
-  metadata {
-    name      = "database"
-    namespace = kubernetes_namespace.app_ns.metadata.0.name
-  }
-  spec {
-    selector = {
-      app = "database"
-    }
-    port {
-      port        = 5432
-      target_port = 5432
-    }
-    type = "ClusterIP"
-  }
 }

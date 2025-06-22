@@ -35,7 +35,15 @@ const sequelize = new Sequelize(
     port: dbConfig.port,
     dialect: dbConfig.dialect,
     logging: dbConfig.logging,
-    pool: dbConfig.pool
+    pool: dbConfig.pool,
+
+    // Add this block to enable SSL and connect to Azure
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false // This is important for Azure
+      }
+    }
   }
 );
 
