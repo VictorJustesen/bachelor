@@ -10,5 +10,16 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
+
+    // Add the proxy configuration here
+    proxy: {
+      // Proxy any request that starts with /api
+      '/api': {
+        // Forward it to your backend server
+        target: 'http://backend:8000',
+        // Needed for the proxy to work correctly
+        changeOrigin: true,
+      },
   },
+}
 })

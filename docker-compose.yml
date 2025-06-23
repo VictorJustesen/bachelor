@@ -14,11 +14,7 @@ services:
      - ./database/database-data:/var/lib/postgresql/data
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dev_user -d realestate_db"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+    
 
   frontend:
     build: ./frontend
@@ -33,10 +29,14 @@ services:
     tty: true
     networks:
       - app-network
+    depends_on:
+      - backend
 
   backend:
     build: ./backend
     container_name: backend-container
+    ports:
+      - "8000:8000"
     environment:
       - SCRAPER_SERVICE_URL=http://scraper:9000
       - PREDICTOR_SERVICE_URL=http://predictor:8001
@@ -50,20 +50,6 @@ services:
       - ./backend:/app:cached
       - /app/node_modules
     command: npm run dev
-    depends_on:
-      database:
-        condition: service_healthy
-    networks:
-      - app-network
-
-  api-gateway:
-    build: ./gateway
-    container_name: gateway-container
-    ports:
-      - "80:80"
-    depends_on:
-      - frontend
-      - backend
     networks:
       - app-network
 
