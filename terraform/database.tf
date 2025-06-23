@@ -32,12 +32,13 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_all_dev" {
 
 # 4. Update the Kubernetes secret with the new Azure DB connection info
 resource "kubernetes_secret" "db_secret" {
+  provider = kubernetes.aks
+  
   metadata {
     name      = "db-secret"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
   }
   data = {
-    # Point to the new Azure PostgreSQL server FQDN (fully qualified domain name)
     POSTGRES_HOST     = azurerm_postgresql_flexible_server.db_server.fqdn
     POSTGRES_USER     = azurerm_postgresql_flexible_server.db_server.administrator_login
     POSTGRES_PASSWORD = azurerm_postgresql_flexible_server.db_server.administrator_password

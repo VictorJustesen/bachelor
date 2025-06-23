@@ -2,6 +2,8 @@
 
 # Backend Deployment
 resource "kubernetes_deployment" "backend" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "backend-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -82,6 +84,8 @@ resource "kubernetes_deployment" "backend" {
 }
 
 resource "kubernetes_service" "backend_service" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "backend"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -92,7 +96,7 @@ resource "kubernetes_service" "backend_service" {
     }
     port {
       port        = 80
-      target_port = 3000 # Assuming your backend runs on port 3000 inside the container
+      target_port = 8000 # Assuming your backend runs on port 3000 inside the container
     }
     type = "ClusterIP"
   }
@@ -102,6 +106,8 @@ resource "kubernetes_service" "backend_service" {
 # Here are the deployments:
 
 resource "kubernetes_deployment" "frontend" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "frontend-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -133,6 +139,8 @@ resource "kubernetes_deployment" "frontend" {
 }
 
 resource "kubernetes_deployment" "scraper" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "scraper-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -164,6 +172,8 @@ resource "kubernetes_deployment" "scraper" {
 }
 
 resource "kubernetes_deployment" "predictor" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "predictor-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -200,6 +210,8 @@ resource "kubernetes_deployment" "predictor" {
 
 # ClusterIP Services for internal communication
 resource "kubernetes_service" "frontend_service" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "frontend"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -217,6 +229,8 @@ resource "kubernetes_service" "frontend_service" {
 }
 
 resource "kubernetes_service" "scraper_service" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "scraper"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -234,6 +248,8 @@ resource "kubernetes_service" "scraper_service" {
 }
 
 resource "kubernetes_service" "predictor_service" {
+  provider = kubernetes.aks
+
   metadata {
     name      = "predictor"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -250,39 +266,70 @@ resource "kubernetes_service" "predictor_service" {
   }
 }
 
-# Configure the Helm provider to connect to your AKS cluster
-provider "helm" {
-  kubernetes {
-    host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-  }
-}
 
-# Configure the Kubernetes provider to connect to your AKS cluster
-provider "kubernetes" {
-  host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-  client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-  client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-}
 
 # Use the Helm provider to install the ingress-nginx controller
 resource "helm_release" "ingress_nginx" {
+  provider = helm.aks
+
   name       = "ingress-nginx"
   repository = "https://kubernetes.github.io/ingress-nginx"
   chart      = "ingress-nginx"
   namespace  = "ingress-basic"
   create_namespace = true
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks
+  ]
 }
 
-# Use a loop to apply all YAML manifests from your kubernetes directory
-resource "kubernetes_manifest" "app_manifests" {
-  for_each = fileset("../kubernetes", "*.yaml")
+resource "kubernetes_ingress_v1" "main_ingress" {
+  provider = kubernetes.aks
 
-  manifest = yamldecode(file("../kubernetes/${each.value}"))
+  metadata {
+    name      = "main-ingress"
+    namespace = kubernetes_namespace.app_ns.metadata.0.name
+    annotations = {
+      "kubernetes.io/ingress.class"                = "nginx"
+      "nginx.ingress.kubernetes.io/rewrite-target" = "/$2"
+    }
+  }
 
-  # This ensures the Ingress controller is ready before applying manifests that need it
-  depends_on = [helm_release.ingress_nginx]
+  spec {
+    rule {
+      http {
+        path {
+          path      = "/api(/|$)(.*)"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = kubernetes_service.backend_service.metadata.0.name
+              port {
+                # CORRECTED: Point to the service port, not the target_port
+                number = 80 
+              }
+            }
+          }
+        }
+
+        path {
+          path      = "/()(.*)"
+          path_type = "Prefix"
+          backend {
+            service {
+              name = kubernetes_service.frontend_service.metadata.0.name
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubernetes_service.backend_service,
+    kubernetes_service.frontend_service
+  ]
 }
