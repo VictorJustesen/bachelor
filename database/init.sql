@@ -99,5 +99,5 @@ CREATE TRIGGER update_predictions_updated_at
 
 -- Insert a test user to verify everything works
 INSERT INTO users (username, email, password_hash, first_name, last_name)
-VALUES ('testuser', 'test@example.com', '$2b$10$example', 'Test', 'User')
+VALUES ('test', 'test@test.com', '$2b$10$T/8Iwl.frK7diVBG9gAfxe1iWTlG7r8OBUOHjFnHSkcQwIqhvyVn2', 'Test', 'User') -- password: testtest
 ON CONFLICT (username) DO NOTHING;

@@ -1,52 +1,42 @@
 const { Sequelize } = require('sequelize');
 
-// Direct configuration using environment variables
+// Check for production environment
+const isProduction = process.env.NODE_ENV === 'prod';
+
+// Define SSL options based on the environment
+const sslOptions = isProduction 
+  ? { ssl: { require: true } } // Enable SSL for production (Azure)
+  : { ssl: false };            // Disable SSL for development (local)
+
+// Define all configuration in one place
 const dbConfig = {
-  host: process.env.DB_HOST || 'database',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'realestate_db',
-  username: process.env.DB_USER || 'dev_user',
-  password: process.env.DB_PASSWORD || 'dev_password',
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  username: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   dialect: 'postgres',
-  logging: process.env.ENVIRONMENT === 'development' ? console.log : false,
+  logging: false, // Disable verbose logging in production
   pool: {
     max: 5,
     min: 0,
     acquire: 30000,
     idle: 10000
+  },
+  dialectOptions: {
+    ...sslOptions
   }
 };
 
-console.log('Database config:', {
-  host: dbConfig.host,
-  port: dbConfig.port,
-  database: dbConfig.database,
-  username: dbConfig.username,
-  dialect: dbConfig.dialect
-});
+// Log the configuration for debugging, but avoid logging the password
+console.log('Database config loaded. SSL required:', isProduction);
 
-// Create Sequelize instance
+// Create a single Sequelize instance using the config object
 const sequelize = new Sequelize(
   dbConfig.database,
   dbConfig.username,
   dbConfig.password,
-  {
-    host: dbConfig.host,
-    port: dbConfig.port,
-    dialect: dbConfig.dialect,
-    logging: dbConfig.logging,
-    pool: dbConfig.pool,
+  dbConfig // Pass the whole config object as options
+);
 
-    // Add this block to enable SSL and connect to Azure
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false // This is important for Azure
-      }
-    }
-  }
-); 
-
-
-
-module.exports = { sequelize};
+module.exports = { sequelize };

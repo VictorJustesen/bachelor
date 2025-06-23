@@ -1,15 +1,16 @@
 #!/bin/bash
 
 # This script builds and pushes all necessary Docker images to Azure Container Registry.
-# It is designed to be run from INSIDE the 'terraform' directory.
+# It tags images with a unique version based on the current timestamp.
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
 # --- Configuration ---
-# Your Azure Container Registry name (the short name, not the full URL)
 ACR_NAME="bacheloracr"
 ACR_URL="$ACR_NAME.azurecr.io"
+# Generate a unique version tag (e.g., 20250623123000)
+VERSION_TAG=$(date +%Y%m%d%H%M%S)
 
 # --- Script ---
 
@@ -19,44 +20,38 @@ echo "Login Succeeded."
 echo ""
 
 # --- Build and Push Each Service ---
-# Note: The paths like ../database are relative to this script's location inside the terraform folder.
 
-echo "--> Building and pushing 'database' image..."
-docker build --platform linux/amd64 -t $ACR_URL/database:latest ../database
-docker push $ACR_URL/database:latest
+echo "--> Building and pushing 'database' (Version: $VERSION_TAG)..."
+docker build --platform linux/amd64 -t $ACR_URL/database:$VERSION_TAG ../database
+docker push $ACR_URL/database:$VERSION_TAG
 echo "Done."
 echo ""
 
-echo "--> Building and pushing 'frontend' image..."
-docker build --platform linux/amd64 -t $ACR_URL/frontend:latest ../frontend
-docker push $ACR_URL/frontend:latest
+echo "--> Building and pushing 'frontend' (Version: $VERSION_TAG)..."
+docker build --platform linux/amd64 -t $ACR_URL/frontend:$VERSION_TAG ../frontend
+docker push $ACR_URL/frontend:$VERSION_TAG
 echo "Done."
 echo ""
 
-echo "--> Building and pushing 'backend' image..."
-docker build --platform linux/amd64 -t $ACR_URL/backend:latest ../backend
-docker push $ACR_URL/backend:latest
+echo "--> Building and pushing 'backend' (Version: $VERSION_TAG)..."
+docker build --platform linux/amd64 -t $ACR_URL/backend:$VERSION_TAG ../backend
+docker push $ACR_URL/backend:$VERSION_TAG
 echo "Done."
 echo ""
 
-echo "--> Building and pushing 'api-gateway' image..."
-docker build --platform linux/amd64 -t $ACR_URL/gateway:latest ../gateway
-docker push $ACR_URL/gateway:latest
+# The gateway service is removed as its role is replaced by Kubernetes Ingress.
+
+echo "--> Building and pushing 'scraper' (Version: $VERSION_TAG)..."
+docker build --platform linux/amd64 -t $ACR_URL/scraper:$VERSION_TAG ../scraping2
+docker push $ACR_URL/scraper:$VERSION_TAG
 echo "Done."
 echo ""
 
-echo "--> Building and pushing 'scraper' image..."
-docker build --platform linux/amd64 -t $ACR_URL/scraper:latest ../scraping2
-docker push $ACR_URL/scraper:latest
-echo "Done."
-echo ""
-
-echo "--> Building and pushing 'predictor' image..."
-# Note: This command's file path (-f) and context (..) are also relative to this script's location.
-docker build --platform linux/amd64 -f ../predictor/Dockerfile -t $ACR_URL/predictor:latest ..
-docker push $ACR_URL/predictor:latest
+echo "--> Building and pushing 'predictor' (Version: $VERSION_TAG)..."
+docker build --platform linux/amd64 -f ../predictor/Dockerfile -t $ACR_URL/predictor:$VERSION_TAG ..
+docker push $ACR_URL/predictor:$VERSION_TAG
 echo "Done."
 echo ""
 
 
-echo "✅ All Docker images have been built and pushed successfully!"
+echo "✅ All Docker images pushed successfully with tag: $VERSION_TAG"
