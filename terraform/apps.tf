@@ -290,30 +290,31 @@ resource "kubernetes_ingress_v1" "main_ingress" {
     name      = "main-ingress"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
     annotations = {
-      "kubernetes.io/ingress.class"                = "nginx"
-      "nginx.ingress.kubernetes.io/rewrite-target" = "/$2"
+      # This annotation is fine for the frontend, but we don't want it for the API
+      "kubernetes.io/ingress.class" = "nginx"
     }
   }
 
   spec {
     rule {
       http {
+        # FIX: Path for the API with NO rewrite
         path {
-          path      = "/api(/|$)(.*)"
+          path      = "/api"
           path_type = "Prefix"
           backend {
             service {
               name = kubernetes_service.backend_service.metadata.0.name
               port {
-                # CORRECTED: Point to the service port, not the target_port
-                number = 80 
+                number = 80
               }
             }
           }
         }
 
+        # Path for the frontend, which can have a rewrite if needed
         path {
-          path      = "/()(.*)"
+          path      = "/"
           path_type = "Prefix"
           backend {
             service {
@@ -327,6 +328,8 @@ resource "kubernetes_ingress_v1" "main_ingress" {
       }
     }
   }
+
+
 
   depends_on = [
     kubernetes_service.backend_service,
