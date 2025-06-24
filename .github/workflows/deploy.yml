@@ -21,6 +21,8 @@ jobs:
         uses: azure/docker-login@v1
         with:
           login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       # --- Build and Push Steps for each service ---
       - name: Run Build and Push Script
