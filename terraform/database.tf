@@ -1,37 +1,17 @@
 # 1. Create the Azure Database for PostgreSQL server
 resource "azurerm_postgresql_flexible_server" "db_server" {
-  name                   = "bachelor-postgres-server"
+  name                   = "bachelor-postgres-server" # Choose a unique name
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
-  zone                   = "1"
+  zone                   = "1" # Add this line to pin the zone
   version                = "13"
-  sku_name               = "B_Standard_B1ms"
+  sku_name               = "B_Standard_B1ms" # This SKU is eligible for the Azure Free Tier
 
   administrator_login    = "dev_user"
-  administrator_password = "YourSecurePassword123!"
+  administrator_password = "YourSecurePassword123!" # Hardcoded as requested
   storage_mb             = 32768
   
   public_network_access_enabled = true
-}
-
-# Configure SSL settings
-resource "azurerm_postgresql_flexible_server_configuration" "ssl_enforcement" {
-  name      = "ssl"
-  server_id = azurerm_postgresql_flexible_server.db_server.id
-  value     = "on"
-}
-
-resource "azurerm_postgresql_flexible_server_configuration" "ssl_min_protocol_version" {
-  name      = "ssl_min_protocol_version"
-  server_id = azurerm_postgresql_flexible_server.db_server.id
-  value     = "TLSv1.2"
-}
-
-# Allow the uuid extension
-resource "azurerm_postgresql_flexible_server_configuration" "allow_extensions" {
-  name      = "azure.extensions"
-  server_id = azurerm_postgresql_flexible_server.db_server.id
-  value     = "uuid-ossp"
 }
 
 # 2. Create the specific database within the server

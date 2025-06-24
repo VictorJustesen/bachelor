@@ -35,10 +35,11 @@ resource "kubernetes_deployment" "backend" {
           }
           env {
             name  = "ENVIRONMENT"
-            value = "dev"
+            value = "prod"
           }
-           env {
-            name = "DB_HOST"
+          # FIXED: Changed the 'name' to match database.js
+          env {
+            name = "POSTGRES_HOST"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.db_secret.metadata.0.name
@@ -46,12 +47,14 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
+          # FIXED: Added POSTGRES_PORT for completeness
           env {
-            name  = "DB_PORT"
+            name  = "POSTGRES_PORT"
             value = "5432"
           }
+          # FIXED: Changed the 'name' to match database.js
           env {
-            name  = "DB_NAME"
+            name  = "POSTGRES_DB"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.db_secret.metadata.0.name
@@ -59,8 +62,9 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
+          # FIXED: Changed the 'name' to match database.js
           env {
-            name  = "DB_USER"
+            name  = "POSTGRES_USER"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.db_secret.metadata.0.name
@@ -68,8 +72,9 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
+          # FIXED: Changed the 'name' to match database.js
           env {
-            name  = "DB_PASSWORD"
+            name  = "POSTGRES_PASSWORD"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.db_secret.metadata.0.name
@@ -82,6 +87,7 @@ resource "kubernetes_deployment" "backend" {
     }
   }
 }
+
 
 resource "kubernetes_service" "backend_service" {
   provider = kubernetes.aks
@@ -96,7 +102,7 @@ resource "kubernetes_service" "backend_service" {
     }
     port {
       port        = 80
-      target_port = 8000 # Assuming your backend runs on port 3000 inside the container
+      target_port = 8000 # Assuming your backend runs on port 8000 inside the container
     }
     type = "ClusterIP"
   }
