@@ -1,0 +1,54 @@
+name: Build, Push, and Deploy to AKS
+#maybe problem with :latest tag fix later
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+
+      # --- Build and Push Steps for each service ---
+      - name: Run Build and Push Script
+        run: |
+          chmod +x ./terraform/build_and_push.sh
+          ./terraform/build_and_push.sh
+
+
+      # --- Terraform Steps ---
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform -chdir=./terraform init
+
+      - name: Terraform Apply
+        run: terraform -chdir=./terraform apply -auto-approve
+
+      # --- Kubernetes Steps ---
+      - name: Set Kubernetes context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Restart Kubernetes Deployments
+        run: |
+          kubectl rollout restart deployment/backend-deployment -n bachelor-app
+          kubectl rollout restart deployment/frontend-deployment -n bachelor-app
+          kubectl rollout restart deployment/scraper-deployment -n bachelor-app
+          kubectl rollout restart deployment/predictor-deployment -n bachelor-app
