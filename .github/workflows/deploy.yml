@@ -27,8 +27,9 @@ jobs:
       # --- Build and Push Steps for each service ---
       - name: Run Build and Push Script
         run: |
-          chmod +x ./terraform/build_and_push.sh
-          ./terraform/build_and_push.sh
+          cd ./terraform
+          chmod +x ./build_and_push.sh
+          ./build_and_push.sh
 
 
       # --- Terraform Steps ---
