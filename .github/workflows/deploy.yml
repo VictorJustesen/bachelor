@@ -59,7 +59,10 @@ jobs:
       - name: Build and push Predictor
         uses: docker/build-push-action@v6
         with:
-          context: ./predictor
+          # Use the repository root as the context
+          context: .
+          # Specify the path to the Dockerfile
+          file: ./predictor/Dockerfile
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/predictor:latest
           cache-from: type=gha,scope=predictor
