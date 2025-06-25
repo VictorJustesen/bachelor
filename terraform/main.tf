@@ -19,25 +19,25 @@ provider "azurerm" {
   features {}
 }
 
-# provider "kubernetes" {
-#   alias = "aks"
-# 
-#   host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-#   client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-#   client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-#   cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-# }
-# 
-# provider "helm" {
-#   alias = "aks"
-# 
-#   kubernetes {
-#     host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-#     client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-#     client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-#     cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-#   }
-# }
+provider "kubernetes" {
+  alias = "aks"
+
+  host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
+  client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
+  client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
+  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
+}
+
+provider "helm" {
+  alias = "aks"
+
+  kubernetes {
+    host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
+    client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
+    client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
+    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
+  }
+}
 
 resource "azurerm_resource_group" "rg" {
   name     = "bachelorrg"
@@ -95,11 +95,10 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
 }
 
-# --- Temporarily commented out for import ---
-# resource "kubernetes_namespace" "app_ns" {
-#   provider = kubernetes.aks
-#   
-#   metadata {
-#     name = "bachelor-app"
-#   }
-# }
+resource "kubernetes_namespace" "app_ns" {
+  provider = kubernetes.aks
+ 
+  metadata {
+    name = "bachelor-app"
+  }
+}
