@@ -2,11 +2,15 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~>3.0"
+      version = "~> 3.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~>2.0"
+      version = "~> 2.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.0"
     }
   }
 }
@@ -14,6 +18,26 @@ terraform {
 provider "azurerm" {
   features {}
 }
+
+# provider "kubernetes" {
+#   alias = "aks"
+# 
+#   host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
+#   client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
+#   client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
+#   cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
+# }
+# 
+# provider "helm" {
+#   alias = "aks"
+# 
+#   kubernetes {
+#     host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
+#     client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
+#     client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
+#     cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
+#   }
+# }
 
 resource "azurerm_resource_group" "rg" {
   name     = "bachelorrg"
@@ -28,7 +52,6 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled       = true
 }
 
-# 1. Add this new resource to create the Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "bachelor-logs-workspace"
   location            = azurerm_resource_group.rg.location
@@ -54,44 +77,15 @@ resource "azurerm_kubernetes_cluster" "aks" {
     type = "SystemAssigned"
   }
 
-  # 2. Add this block to link your AKS cluster to the Log Analytics Workspace
   oms_agent {
     log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   }
 
   network_profile {
-    network_plugin = "kubenet"
-    service_cidr   = "10.0.0.0/16"
-    dns_service_ip = "10.0.1.10"
+    network_plugin     = "kubenet"
+    service_cidr       = "10.0.0.0/16"
+    dns_service_ip     = "10.0.1.10"
     docker_bridge_cidr = "172.17.0.1/16"
-  }
-}
-
-provider "kubernetes" {
-  alias = "aks"
-  
-  host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-  client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-  client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-}
-
-provider "helm" {
-  alias = "aks"
-  
-  kubernetes = {
-    host                   = azurerm_kubernetes_cluster.aks.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.aks.kube_config.0.cluster_ca_certificate)
-  }
-}
-
-resource "kubernetes_namespace" "app_ns" {
-  provider = kubernetes.aks
-  
-  metadata {
-    name = "bachelor-app"
   }
 }
 
@@ -100,3 +94,12 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   role_definition_name = "AcrPull"
   principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
 }
+
+# --- Temporarily commented out for import ---
+# resource "kubernetes_namespace" "app_ns" {
+#   provider = kubernetes.aks
+#   
+#   metadata {
+#     name = "bachelor-app"
+#   }
+# }
