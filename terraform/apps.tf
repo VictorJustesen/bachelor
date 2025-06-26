@@ -4,6 +4,10 @@
 resource "kubernetes_deployment" "backend" {
   provider = kubernetes.aks
 
+  depends_on = [
+    azurerm_role_assignment.aks_acr_pull
+  ]
+
   metadata {
     name      = "backend-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -114,6 +118,10 @@ resource "kubernetes_service" "backend_service" {
 resource "kubernetes_deployment" "frontend" {
   provider = kubernetes.aks
 
+  depends_on = [
+    azurerm_role_assignment.aks_acr_pull
+  ]
+
   metadata {
     name      = "frontend-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -147,6 +155,10 @@ resource "kubernetes_deployment" "frontend" {
 resource "kubernetes_deployment" "scraper" {
   provider = kubernetes.aks
 
+  depends_on = [
+    azurerm_role_assignment.aks_acr_pull
+  ]
+
   metadata {
     name      = "scraper-deployment"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
@@ -179,6 +191,10 @@ resource "kubernetes_deployment" "scraper" {
 
 resource "kubernetes_deployment" "predictor" {
   provider = kubernetes.aks
+
+  depends_on = [
+    azurerm_role_assignment.aks_acr_pull
+  ]
 
   metadata {
     name      = "predictor-deployment"
