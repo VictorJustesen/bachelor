@@ -103,23 +103,22 @@ function Start({ onEnterFree }) {
 
   return (
     <div className="start-container">
-      <div className="start-title">Hot reloadww test: {showLogin.valueOf().toString()}</div>
       <h1 className="start-title">Bolig beregner</h1>
       
       {!user ? (
         <div className="start-options">
           {!showLogin ? (
-            <>
+            <div className="start-buttons">
               <button className="start-button" onClick={onEnterFree}>
                 Enter Free Mode
               </button>
               <button 
-                className="start-button login-button" 
+                className=" login-button" 
                 onClick={() => setShowLogin(true)}
               >
                 Login / Register
               </button>
-            </>
+            </div>
           ) : (
             <div className="auth-form">
               <div className="form-toggle">
@@ -204,12 +203,7 @@ function Start({ onEnterFree }) {
             <button className="start-button" onClick={onEnterFree}>
               Start Calculating
             </button>
-            <button 
-              className="logout-button"
-              onClick={handleLogout}
-            >
-              Logout
-            </button>
+            
           </div>
         </div>
       )}
