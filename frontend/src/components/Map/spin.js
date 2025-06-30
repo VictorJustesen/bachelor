@@ -8,7 +8,8 @@ export default function useSpin(mapRef, params, spinSpeed, setSpinSpeed) {
     lastDragPos: null,
     lastDragTime: null,
     decayRate: 0.95,
-    dragStarted: false
+    dragStarted: false,
+    minSpeed: 5.0 // Add configurable minimum speed
   })
 
   useEffect(() => {
@@ -26,14 +27,16 @@ export default function useSpin(mapRef, params, spinSpeed, setSpinSpeed) {
     }
     spinRef.current = requestAnimationFrame(animate)
 
-    // decay
+      // decay
     function startDecay() {
       clearInterval(decayTimerRef.current)
       decayTimerRef.current = setInterval(() => {
         setSpinSpeed(s => {
           const dec = s * stateRef.current.decayRate
-          return Math.abs(dec) < 0.5
-            ? Math.sign(s) * 0.5
+          const minSpeed = stateRef.current.minSpeed
+          // If speed has decayed below minimum, clamp it to minimum
+          return Math.abs(dec) < minSpeed
+            ? Math.sign(s) * minSpeed
             : dec
         })
       }, 100)

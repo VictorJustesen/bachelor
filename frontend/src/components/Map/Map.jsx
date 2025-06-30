@@ -100,10 +100,12 @@ function Map({ params, markers = [], onMapLoad }) {
     if (!map) return
 
     const updateLightPreset = () => {
+      console.log("Updating light preset")
       const lightPreset = isDark ? 'night' : 'day'
+      console.log("Setting light preset to:", lightPreset)
       map.setConfigProperty('basemap', 'lightPreset', lightPreset)
+      console.log("Light preset updated to:", lightPreset)
     }
-    
     if (map.isStyleLoaded()) {
       updateLightPreset()
     } else {
