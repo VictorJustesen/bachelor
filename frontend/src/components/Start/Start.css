@@ -1,7 +1,7 @@
 .start-title {
   position: absolute;
-  top: 5px;
-  left: 20px;
+  top: 100px;
+  left: 200px;
   z-index: 2;
   color: black;
   font-size: 3em;
@@ -17,8 +17,8 @@
 .start-buttons{
   position: absolute;
   width: 330px;
-  top: 150px;
-  left: 20px;
+  top: 200px;
+  left: 200px;
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -42,8 +42,8 @@
 
 .auth-form {
   position: absolute;
-  top: 150px;
-  left: 20px;
+  top: 200px;
+  left: 200px;
   width: 310px !important; 
   z-index: 2;
   background: rgba(255, 255, 255, 0.95);

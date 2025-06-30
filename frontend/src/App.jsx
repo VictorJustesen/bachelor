@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react'
+import { ThemeProvider } from './contexts/ThemeContext'
+import Header from './components/Header/Header'
 import Start from './components/Start/Start.jsx'
 import Free from './components/Free/Free.jsx'
 import Map from './components/Map/Map.jsx'
@@ -25,15 +27,20 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <Map
-        params={params}
-        markers={mode === 'start' ? houseMarkers : []}
-        onMapLoad={map => { mapInstance.current = map }}
-      />
-      {mode === 'start' && <Start onEnterFree={() => setMode('free')} />}
-      {mode === 'free' && <Free map={mapInstance.current} />}
-    </div>
+    <ThemeProvider>
+      <div className="app-container">
+        <Header />
+        <div className="main-content">
+          <Map
+            params={params}
+            markers={mode === 'start' ? houseMarkers : []}
+            onMapLoad={map => { mapInstance.current = map }}
+          />
+          {mode === 'start' && <Start onEnterFree={() => setMode('free')} />}
+          {mode === 'free' && <Free map={mapInstance.current} />}
+        </div>
+      </div>
+    </ThemeProvider>
   )
 }
 

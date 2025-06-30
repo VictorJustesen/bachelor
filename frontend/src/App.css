@@ -9,7 +9,6 @@
 #map-container {
   height: 100%;
   width: 100%;
-  /* temporarily set the background color so we can tell where the map container is positioned */
   background-color: lightgrey;
 }
 
@@ -58,8 +57,17 @@
   width: 100vw;
   height: 100vh;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-* {
-border: 1px solid red;
+.main-content {
+  flex: 1;
+  position: relative;
+  margin-top: 60px; /* Account for fixed header height */
 }
+
+ * {
+  border: 1px solid red;
+} 
+

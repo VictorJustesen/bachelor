@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import useSpin from './spin'
 import { reverseGeocode } from '../../api/mapbox.js'
+import { useTheme } from '../../contexts/ThemeContext.jsx' // Make sure this path is correct
 
 function Map({ params, markers = [], onMapLoad }) {
   const mapRef = useRef()
@@ -11,12 +12,13 @@ function Map({ params, markers = [], onMapLoad }) {
   const hoverRef = useRef({ hoveredId: null })
   
   const [spinSpeed, setSpinSpeed] = useState(8)
+  const { isDark } = useTheme()
 
   useEffect(() => {
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: 'mapbox://styles/mapbox/standard',
       center: params.center,
       zoom: params.zoom,
       pitch: params.pitch,
@@ -87,9 +89,27 @@ function Map({ params, markers = [], onMapLoad }) {
 
     if (onMapLoad) onMapLoad(mapRef.current)
     return () => {
-      mapRef.current.remove()
+      if (mapRef.current) {
+        mapRef.current.remove()
+      }
     }
   }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const updateLightPreset = () => {
+      const lightPreset = isDark ? 'night' : 'day'
+      map.setConfigProperty('basemap', 'lightPreset', lightPreset)
+    }
+    
+    if (map.isStyleLoaded()) {
+      updateLightPreset()
+    } else {
+      map.once('style.load', updateLightPreset)
+    }
+  }, [isDark])
 
   useSpin(mapRef, params, spinSpeed, setSpinSpeed)
 
@@ -155,7 +175,7 @@ function Map({ params, markers = [], onMapLoad }) {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
 
-    function onMouseMove(e) {
+    const onMouseMove = e => {
       if (!params.interactive || !e.features.length) return
       if (hoverRef.current.hoveredId !== null) {
         map.setFeatureState(
@@ -171,7 +191,7 @@ function Map({ params, markers = [], onMapLoad }) {
       map.getCanvas().style.cursor = 'pointer'
     }
 
-    function onMouseLeave() {
+    const onMouseLeave = () => {
       if (!params.interactive) return
       if (hoverRef.current.hoveredId !== null) {
         map.setFeatureState(
@@ -187,9 +207,13 @@ function Map({ params, markers = [], onMapLoad }) {
     map.on('mouseleave','3d-buildings', onMouseLeave)
 
     return () => {
-      map.off('mousemove','3d-buildings', onMouseMove)
-      map.off('mouseleave','3d-buildings', onMouseLeave)
-      map.getCanvas().style.cursor = ''
+      if (map.isStyleLoaded()) {
+        map.off('mousemove','3d-buildings', onMouseMove)
+        map.off('mouseleave','3d-buildings', onMouseLeave)
+        if(map.getCanvas()) {
+            map.getCanvas().style.cursor = ''
+        }
+      }
     }
   }, [params.interactive])
 

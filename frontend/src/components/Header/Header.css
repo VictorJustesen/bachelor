@@ -1,0 +1,146 @@
+:root {
+  /* Light theme colors */
+  --header-bg-light: #ffffff;
+  --header-text-light: #1a1a1a;
+  --header-border-light: #e0e0e0;
+  --header-shadow-light: rgba(0, 0, 0, 0.1);
+  
+  /* Dark theme colors */
+  --header-bg-dark: #1a1a1a;
+  --header-text-dark: #ffffff;
+  --header-border-dark: #333333;
+  --header-shadow-dark: rgba(255, 255, 255, 0.1);
+  
+  /* Button colors */
+  --btn-bg-light: #f5f5f5;
+  --btn-bg-dark: #333333;
+  --btn-hover-light: #e0e0e0;
+  --btn-hover-dark: #444444;
+}
+
+[data-theme="light"] {
+  --header-bg: var(--header-bg-light);
+  --header-text: var(--header-text-light);
+  --header-border: var(--header-border-light);
+  --header-shadow: var(--header-shadow-light);
+  --btn-bg: var(--btn-bg-light);
+  --btn-hover: var(--btn-hover-light);
+}
+
+[data-theme="dark"] {
+  --header-bg: var(--header-bg-dark);
+  --header-text: var(--header-text-dark);
+  --header-border: var(--header-border-dark);
+  --header-shadow: var(--header-shadow-dark);
+  --btn-bg: var(--btn-bg-dark);
+  --btn-hover: var(--btn-hover-dark);
+}
+
+/* Light theme (default) */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+/* Dark theme */
+[data-theme="dark"] .app-header {
+  background-color: #1a1a1a;
+  color: #ffffff;
+  border-bottom: 1px solid #333333;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  margin: 0 auto;
+}
+
+.header-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  color: inherit;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Light theme button */
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  color: #1a1a1a;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.theme-toggle-btn:hover {
+  background-color: #e0e0e0;
+  transform: translateY(-1px);
+}
+
+/* Dark theme button */
+[data-theme="dark"] .theme-toggle-btn {
+  background-color: #333333;
+  color: #ffffff;
+  border: 1px solid #444444;
+}
+
+[data-theme="dark"] .theme-toggle-btn:hover {
+  background-color: #444444;
+}
+
+.theme-toggle-btn:active {
+  transform: translateY(0);
+}
+
+.theme-icon {
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.theme-text {
+  font-family: inherit;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .header-content {
+    padding: 10px 16px;
+  }
+  
+  .header-title {
+    font-size: 1.25rem;
+  }
+  
+  .theme-text {
+    display: none;
+  }
+  
+  .theme-toggle-btn {
+    padding: 8px 12px;
+  }
+}
