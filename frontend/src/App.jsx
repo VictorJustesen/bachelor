@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react'; // 1. Import useCallback
 import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header/Header';
 import Start from './components/Start/Start.jsx';
@@ -22,7 +22,8 @@ function App() {
       : { interactive: true, spin: false, flyToOnMount: true }),
   };
 
-  const handleMapClick = async (lngLat) => {
+  // 2. Wrap handleMapClick in useCallback
+  const handleMapClick = useCallback(async (lngLat) => {
     setPin(lngLat);
     const features = await reverseGeocode(lngLat.lng, lngLat.lat);
     const address = features[0]?.place_name || 'Address not found';
@@ -33,7 +34,7 @@ function App() {
         center: [lngLat.lng, lngLat.lat]
       });
     }
-  };
+  }, []); // Dependencies are empty as setPin and reverseGeocode are stable
 
   const handleHeaderSearchSelect = (result) => {
     setPin({ lng: result.center[0], lat: result.center[1] });
@@ -41,6 +42,11 @@ function App() {
         freeComponentRef.current.handleLocationSelect(result);
     }
   };
+  
+  // Also wrap onMapLoad for consistency
+  const onMapLoad = useCallback(map => {
+    mapInstance.current = map;
+  }, []);
 
   return (
     <ThemeProvider>
@@ -50,8 +56,8 @@ function App() {
           <Map
             params={params}
             pin={pin}
-            onMapLoad={map => { mapInstance.current = map; }}
-            onMapClick={handleMapClick}
+            onMapLoad={onMapLoad} // Pass the memoized function
+            onMapClick={handleMapClick} // Pass the memoized function
           />
           {mode === 'start' && <Start onEnterFree={() => setMode('free')} />}
           {mode === 'free' && <Free ref={freeComponentRef} map={mapInstance.current} />}

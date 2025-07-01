@@ -4,6 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import useSpin from './spin';
 import { reverseGeocode } from '../../api/mapbox.js';
 import { useTheme } from '../../contexts/ThemeContext.jsx';
+import './Map.css';
 
 function Map({ params, onMapLoad, onMapClick, pin }) {
   const mapRef = useRef();
