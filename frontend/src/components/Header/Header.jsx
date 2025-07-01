@@ -3,7 +3,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import './Header.css';
 
 function Header() {
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { theme, toggleTheme, isDark, isTransitioning } = useTheme();
 
   return (
     <header className="app-header" data-theme={theme}>
@@ -14,9 +14,12 @@ function Header() {
           <button 
             className="theme-toggle-btn"
             onClick={toggleTheme}
+            disabled={isTransitioning}
             aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
           >
-            {isDark ? (
+            {isTransitioning ? (
+              <span className="theme-icon">🔄</span>
+            ) : isDark ? (
               <span className="theme-icon">☀️</span>
             ) : (
               <span className="theme-icon">🌙</span>

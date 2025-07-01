@@ -10,9 +10,11 @@ function Map({ params, markers = [], onMapLoad }) {
   const mapContainerRef = useRef()
   const markersRef = useRef([])
   const hoverRef = useRef({ hoveredId: null })
+  const transitionTimerRef = useRef(null)
+
   
   const [spinSpeed, setSpinSpeed] = useState(8)
-  const { isDark } = useTheme()
+  const { isDark, setIsTransitioning } = useTheme()
 
   useEffect(() => {
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
@@ -94,24 +96,37 @@ function Map({ params, markers = [], onMapLoad }) {
       }
     }
   }, [])
-
-  useEffect(() => {
+    useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
     const updateLightPreset = () => {
-      console.log("Updating light preset")
-      const lightPreset = isDark ? 'night' : 'day'
-      console.log("Setting light preset to:", lightPreset)
+      setIsTransitioning(true)
+      const lightPreset = isDark ? 'dusk' : 'light'
       map.setConfigProperty('basemap', 'lightPreset', lightPreset)
-      console.log("Light preset updated to:", lightPreset)
+      
+      map.once('styledata', () => {
+        if (transitionTimerRef.current) {
+          clearTimeout(transitionTimerRef.current)
+        }
+        transitionTimerRef.current = setTimeout(() => {
+          setIsTransitioning(false)
+        }, 500)
+      })
     }
+
     if (map.isStyleLoaded()) {
       updateLightPreset()
     } else {
       map.once('style.load', updateLightPreset)
     }
-  }, [isDark])
+
+    return () => {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current)
+      }
+    }
+  }, [isDark, setIsTransitioning])
 
   useSpin(mapRef, params, spinSpeed, setSpinSpeed)
 
