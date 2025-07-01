@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { reverseGeocode } from '../../api/mapbox';
 import { getBuildingDetails, getPropertyHistory, estimatePrice } from '../../api/backend';
 import './Free.css';
 
@@ -10,12 +9,15 @@ const Free = forwardRef(({ map }, ref) => {
   const [estimatedPrice, setEstimatedPrice] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingInfo, setIsFetchingInfo] = useState(false);
+  const [visible, setVisible] = useState(true);
 
+  // Expose the handleLocationSelect function to the parent component (App.jsx)
   useImperativeHandle(ref, () => ({
     handleLocationSelect
   }));
 
-  const handleLocationSelect = async (result) => {
+  // This function is called from App.jsx when a search result is selected in the Header
+  const handleLocationSelect = (result) => {
     const [lng, lat] = result.center;
 
     map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true });
@@ -25,8 +27,10 @@ const Free = forwardRef(({ map }, ref) => {
       salesHistory: []
     };
     setSelectedData(selectedDataObj);
-    setEstimatedPrice(null);
+    setVisible(true); // Ensure the overlay is visible when a location is selected
+    setEstimatedPrice(null); // Clear any previous price estimate
 
+    // Fetch property information after a short delay to allow the map to animate
     setTimeout(() => {
       handleFetchInformation(selectedDataObj);
     }, 500);
@@ -83,8 +87,11 @@ const Free = forwardRef(({ map }, ref) => {
 
   return (
     <div className="free-controls">
-      {selectedData && (
+      {selectedData && visible && ( 
         <div className="select-overlay">
+            <button className="close-button" onClick={() => setVisible(false)}>
+        ×
+      </button>
           <h3>Ejendomsdata</h3>
           <label>
             Adresse:

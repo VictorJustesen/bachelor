@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'; // 1. Import useCallback
+import { useState, useRef, useCallback } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header/Header';
 import Start from './components/Start/Start.jsx';
@@ -22,28 +22,28 @@ function App() {
       : { interactive: true, spin: false, flyToOnMount: true }),
   };
 
-  // 2. Wrap handleMapClick in useCallback
   const handleMapClick = useCallback(async (lngLat) => {
     setPin(lngLat);
     const features = await reverseGeocode(lngLat.lng, lngLat.lat);
-    const address = features[0]?.place_name || 'Address not found';
+    const result = features[0] || {};
+    result.center = [lngLat.lng, lngLat.lat];
+    if (!result.place_name) {
+        result.place_name = `Valgt punkt: ${lngLat.lat.toFixed(4)}, ${lngLat.lng.toFixed(4)}`;
+    }
 
     if (freeComponentRef.current) {
-      freeComponentRef.current.handleLocationSelect({
-        address: address,
-        center: [lngLat.lng, lngLat.lat]
-      });
+      freeComponentRef.current.handleLocationSelect(result);
     }
-  }, []); // Dependencies are empty as setPin and reverseGeocode are stable
+  }, []);
 
   const handleHeaderSearchSelect = (result) => {
-    setPin({ lng: result.center[0], lat: result.center[1] });
+    const [lng, lat] = result.center;
+    setPin({ lng, lat });
     if (freeComponentRef.current) {
         freeComponentRef.current.handleLocationSelect(result);
     }
   };
   
-  // Also wrap onMapLoad for consistency
   const onMapLoad = useCallback(map => {
     mapInstance.current = map;
   }, []);
@@ -56,8 +56,8 @@ function App() {
           <Map
             params={params}
             pin={pin}
-            onMapLoad={onMapLoad} // Pass the memoized function
-            onMapClick={handleMapClick} // Pass the memoized function
+            onMapLoad={onMapLoad}
+            onMapClick={handleMapClick}
           />
           {mode === 'start' && <Start onEnterFree={() => setMode('free')} />}
           {mode === 'free' && <Free ref={freeComponentRef} map={mapInstance.current} />}
