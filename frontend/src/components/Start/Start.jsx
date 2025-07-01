@@ -109,15 +109,16 @@ function Start({ onEnterFree }) {
         <div className="start-options">
           {!showLogin ? (
             <div className="start-buttons">
-              <button className="start-button" onClick={onEnterFree}>
-                Enter Free Mode
-              </button>
               <button 
                 className=" login-button" 
                 onClick={() => setShowLogin(true)}
               >
                 Login / Register
               </button>
+              <button className="start-button" onClick={onEnterFree}>
+                Enter Free Mode
+              </button>
+              
             </div>
           ) : (
             <div className="auth-form">
@@ -182,13 +183,13 @@ function Start({ onEnterFree }) {
                   required
                 />
                 
-                <button type="submit" className="start-button">
+                <button type="submit" className="login-button">
                   {isLogin ? 'Login' : 'Register'}
                 </button>
               </form>
 
               <button 
-                className="back-button"
+                className="start-button"
                 onClick={() => setShowLogin(false)}
               >
                 Back

@@ -111,7 +111,7 @@ function Map({ params, markers = [], onMapLoad }) {
         }
         transitionTimerRef.current = setTimeout(() => {
           setIsTransitioning(false)
-        }, 500)
+        }, 1500)
       })
     }
 
