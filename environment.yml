@@ -1,0 +1,24 @@
+name: bachelor
+channels:
+  - defaults
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - ipywidgets
+  - jupyter
+  - matplotlib
+  - numpy
+  - openpyxl
+  - pandas
+  - pyarrow
+  - python
+  - scikit-learn
+  - seaborn
+  - xgboost
+  - lxml
+  - html5lib
+  - lightgbm
+  - nodejs
+  - stern
+  - ijson
+prefix: /opt/anaconda3/envs/bachelor
