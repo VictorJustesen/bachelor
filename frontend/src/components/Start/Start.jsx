@@ -22,30 +22,22 @@ function Start({ onEnterFree }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    console.log('Login attempt with:', { username: formData.username });
     try {
-      // Use relative URL - gateway will route this to backend
       const response = await fetch('/api/users/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: formData.username,
           password: formData.password
         }),
       });
 
-      console.log('Response status:', response.status);
-
       if (response.ok) {
         const data = await response.json();
-        console.log('Login successful:', data);
         localStorage.setItem('token', data.token);
         setUser(data.user);
         setShowLogin(false);
       } else {
-        console.log('Login failed with status:', await response.text());
         alert('Login failed');
       }
     } catch (error) {
@@ -57,12 +49,9 @@ function Start({ onEnterFree }) {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      // Use relative URL - gateway will route this to backend
       const response = await fetch('/api/users/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: formData.username,
           email: formData.email,
@@ -71,14 +60,6 @@ function Start({ onEnterFree }) {
           last_name: formData.lastName
         }),
       });
-      
-      console.log('Registering user with data:', {
-        username: formData.username,
-        email: formData.email,
-        first_name: formData.firstName,
-        last_name: formData.lastName
-      });
-      console.log('Response status:', response.text());
 
       if (response.ok) {
         const data = await response.json();
@@ -102,41 +83,36 @@ function Start({ onEnterFree }) {
   const handleSubmit = isLogin ? handleLogin : handleRegister;
 
   return (
-    <div className="start-container">
+    <div className="start-wrapper">
       <h1 className="start-title">Bolig beregner</h1>
-      
+
       {!user ? (
-        <div className="start-options">
+        <>
           {!showLogin ? (
-            <div className="start-buttons">
-              <button 
-                className=" login-button" 
-                onClick={() => setShowLogin(true)}
-              >
+            <div className="start-actions">
+              <button className="start-button" onClick={() => setShowLogin(true)}>
                 Login / Register
               </button>
               <button className="start-button" onClick={onEnterFree}>
                 Enter Free Mode
               </button>
-              
             </div>
           ) : (
             <div className="auth-form">
               <div className="form-toggle">
-                <button 
+                <button
                   className={isLogin ? 'active' : ''}
                   onClick={() => setIsLogin(true)}
                 >
                   Login
                 </button>
-                <button 
+                <button
                   className={!isLogin ? 'active' : ''}
                   onClick={() => setIsLogin(false)}
                 >
                   Register
                 </button>
               </div>
-
               <form onSubmit={handleSubmit}>
                 <input
                   type="text"
@@ -146,7 +122,6 @@ function Start({ onEnterFree }) {
                   onChange={handleInputChange}
                   required
                 />
-                
                 {!isLogin && (
                   <>
                     <input
@@ -173,7 +148,6 @@ function Start({ onEnterFree }) {
                     />
                   </>
                 )}
-                
                 <input
                   type="password"
                   name="password"
@@ -182,21 +156,16 @@ function Start({ onEnterFree }) {
                   onChange={handleInputChange}
                   required
                 />
-                
-                <button type="submit" className="login-button">
+                <button type="submit" className="start-button">
                   {isLogin ? 'Login' : 'Register'}
                 </button>
               </form>
-
-              <button 
-                className="start-button"
-                onClick={() => setShowLogin(false)}
-              >
+              <button className="start-button back-button" onClick={() => setShowLogin(false)}>
                 Back
               </button>
             </div>
           )}
-        </div>
+        </>
       ) : (
         <div className="user-welcome">
           <p>Welcome back, {user.first_name || user.username}!</p>
@@ -204,7 +173,9 @@ function Start({ onEnterFree }) {
             <button className="start-button" onClick={onEnterFree}>
               Start Calculating
             </button>
-            
+            <button className="start-button logout-button" onClick={handleLogout}>
+              Logout
+            </button>
           </div>
         </div>
       )}

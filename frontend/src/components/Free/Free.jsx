@@ -142,10 +142,10 @@ const Free = forwardRef(({ map }, ref) => {
             />
           </label>
 
-          <h4>Salgshistorik</h4>
+          <h4 className='text'>Salgshistorik</h4>
           <ul>
             {selectedData.salesHistory?.map((sale, i) => (
-              <li key={i}>
+              <li className='text' key={i}>
                 {sale.date}: DKK {sale.price?.toLocaleString()} {sale.type && `(${sale.type})`}
               </li>
             ))}

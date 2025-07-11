@@ -1,114 +1,82 @@
-.start-title {
+
+.start-wrapper {
   position: absolute;
-  top: 50px;
-  left: 200px;
-  z-index: 2;
+  top: 100px;
+  left: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.start-title {
+  margin-bottom: 2rem;
+  font-size: 2.5rem;
+  text-align: center;
   color: var(--text);
-  font-size: 3.3em;
+}
+
+.start-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
 }
 
 .start-button {
-  z-index: 2;
-  padding: 1em 2em;
-  font-size: 1.2em;
-  width: 100%;
   background-color: var(--btn-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
   transition: all 0.3s ease;
+  width: 100%;
+  margin: 0 auto;
+  max-width: 300px;
 }
 
 .start-button:hover {
   background-color: var(--btn-hover);
 }
 
-.start-buttons{
-  position: absolute;
-  width: 330px;
-  top: 200px;
-  left: 200px;
-  z-index: 2;
+.auth-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  align-items: center;
-  margin: 0;
-  /* Frosted glass effect */
-  background: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 16px;
   padding: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-/* Dark theme frosted glass */
-[data-theme="dark"] .start-buttons {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-.login-button {
-  background-color: #28a745;
-  padding: 1em 2em;
-  font-size: 1.2em;
   width: 100%;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.login-button:hover {
-  background-color: #218838;
-}
-
-.auth-form {
-  position: absolute;
-  top: 200px;
-  left: 200px;
-  width: 310px; 
-  z-index: 2;
-  /* Frosted glass effect - same as start-buttons */
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 1.5rem;
+  max-width: 400px;
+  margin: 0 auto;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  margin: 0;
-}
-
-/* Dark theme frosted glass for auth-form */
-[data-theme="dark"] .auth-form {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .form-toggle {
   display: flex;
-  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border);
 }
 
 .form-toggle button {
   flex: 1;
   padding: 0.75rem;
   background: var(--btn-bg);
-  border: none;
   color: var(--text);
-  cursor: pointer;
+  border: none;
   transition: all 0.3s ease;
   font-weight: 500;
+  cursor: pointer;
 }
 
 .form-toggle button.active {
@@ -129,129 +97,59 @@
   border-radius: 8px;
   background: var(--bg);
   color: var(--text);
-  font-size: 1rem;
-  transition: all 0.3s ease;
 }
 
-.auth-form input::placeholder {
-  color: var(--text);
-  opacity: 0.6;
+.back-button {
+  margin-top: 1rem;
 }
-
-.auth-form input:focus {
-  outline: none;
-  border-color: #28a745;
-  box-shadow: 0 0 10px rgba(40, 167, 69, 0.2);
-}
-
-.auth-form .start-button {
-  position: relative;
-  top: auto;
-  left: auto;
-  transform: none;
-  width: 100%;
-  margin-top: 0.5rem;
-}
-
-
 
 .user-welcome {
-  position: absolute;
-  top: 100px;
-  left: 200px;
-  transform: translateX(-50%);
-  z-index: 2;
-  text-align: center;
-  background: var(--bg);
-  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
   padding: 2rem;
-  border-radius: 15px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 20px var(--shadow);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .user-welcome p {
   color: var(--text);
   font-size: 1.2rem;
   margin-bottom: 1.5rem;
-  font-weight: 500;
+  text-align: center;
 }
 
 .user-options {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  align-items: center;
-}
-
-.user-options .start-button {
-  position: relative;
-  top: auto;
-  left: auto;
-  transform: none;
+  width: 100%;
+  max-width: 300px;
 }
 
 .logout-button {
   background: rgba(220, 53, 69, 0.9);
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  font-weight: 500;
+  color: #fff;
 }
 
 .logout-button:hover {
   background: rgba(220, 53, 69, 1);
 }
 
+/* Mobile: keep the layout centered and simple */
 @media (max-width: 768px) {
   .start-title {
-    position: static;
-    top: auto;
-    left: auto;
-    margin: 2rem auto 1rem auto;
-    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
   }
 
-  .start-buttons {
-    position: static;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 501px;
-    z-index: 9999;
-  }
-
-  .auth-form {
-    position: static;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 501px;
-    z-index: 9999;
-  }
-
-  .user-welcome {
-    position: static;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 501px;
-    z-index: 9999;
-  }
-
-  .start-container {
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 501px;
-    z-index: 9999;
+  .auth-form, .user-welcome {
+      .free-controls {
+        max-width: 90%;
+      }
   }
 }
