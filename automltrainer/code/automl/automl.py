@@ -16,36 +16,26 @@ import os
 from typing import Dict, Any, Optional, List
 
 class SimpleAutoML:
-    def __init__(self, target_col='purchase_price', test_split=0.2, cv_folds=3):
-        self.target_col = target_col
-        self.test_split = test_split
-        self.cv_folds = cv_folds
+    def __init__(self):
+      
         
-        # Components that will be fitted
         self.scaler = StandardScaler()
-        # Removed: self.label_encoders = {}  # Not needed for pre-encoded data
         self.feature_selector = None
         self.best_model = None
         self.model_registry = ModelRegistry()
         
-        # Results storage
         self.results = {}
         
-        # Store data preprocessing info for later use
         self.feature_columns = None
         self.sanitized_feature_names = None
         self.original_feature_names = None
-        
+        self.target_col = None
     def save_model(self, filepath: str, include_results: bool = True):
-        """Save the trained AutoML model and preprocessing components to disk."""
-        if self.best_model is None:
-            raise ValueError("No model has been trained yet. Call run_automl() first.")
+
         
-        # Create directory if it doesn't exist
         base_dir = os.path.dirname(filepath) if os.path.dirname(filepath) else '.'
         os.makedirs(base_dir, exist_ok=True)
         
-        # Create model package with metadata
         model_package = {
             'model': self.best_model,
             'feature_selector': self.feature_selector,
@@ -61,12 +51,10 @@ class SimpleAutoML:
         if include_results:
             model_package['results'] = self.results
         
-        # Save main package
         main_path = f"{filepath}.pkl"
         joblib.dump(model_package, main_path)
         print(f"Model package saved to: {main_path}")
         
-        # Let the model save its own weights if it wants to
         if hasattr(self.best_model, 'save_model'):
             try:
                 weights_path = self.best_model.save_model(filepath)
@@ -80,6 +68,7 @@ class SimpleAutoML:
 
 
     def run_automl(self, df: pd.DataFrame, 
+               target_col: str,  
                feature_selection_fn=None,
                hypertuning_fn=None,
                models_to_run: Optional[List[str]] = None,
@@ -87,22 +76,19 @@ class SimpleAutoML:
                test_split=0.2,
                verbose=1, param_amount='small',
                loss_fn=None) -> Dict[str, Any]:
-
-        print("Starting AutoML Pipeline - Training ALL available models...")
-        
-        # Step 1: Split data (without scaling - we'll scale within CV)
+        self.target_col = target_col
+        # used to do train/val/test
         X_train, X_test, y_train, y_test = self._prepare_data_splits_no_scaling(df, test_split)
-        
-        # Create CV splitter for feature selection and hypertuning
+        #cv method
         cv = TimeSeriesSplit(n_splits=n_splits)
         
-        # Step 2: Train ALL available models (with individual feature selection)
         model_results = {}
+        #runs the models that are in the registry, or the ones specified
         all_model_names = models_to_run if models_to_run is not None else self.model_registry.list_models()
         print(f"Training {len(all_model_names)} models: {all_model_names}")
         
         for model_name in all_model_names:
-            print(f"\nTraining {model_name}...")
+            print(f"\nTraining {model_name}")
             try:
                 model_config = self.model_registry.get_model_config(model_name)
                 
@@ -110,10 +96,10 @@ class SimpleAutoML:
                 X_train_model = X_train.copy()
                 X_test_model = X_test.copy()
                 
-                # Step 2a: Feature selection for THIS specific model (if provided)
+                # Step 2a Feature selection 
                 feature_selector = None
                 if feature_selection_fn is not None:
-                    print(f"  Running feature selection for {model_name}...")
+                    print(f"  Running feature selection for {model_name}")
                     
                     # Create a quick model instance for feature selection
                     selector_model = model_config.get_model(loss_fn=loss_fn)
@@ -122,7 +108,7 @@ class SimpleAutoML:
                     feature_selector = feature_selection_fn(
                         estimator=selector_model,
                          loss_fn=loss_fn,
-                        cv=cv,  # Pass CV splitter
+                        cv=cv,  
                         verbose=verbose,
                     )
 
@@ -132,9 +118,9 @@ class SimpleAutoML:
                     
                     print(f"  Features after selection for {model_name}: {X_train_model.shape[1]}")
                 
-                # Step 2b: Hyperparameter tuning for THIS model (if provided)
+                # Step 2b Hyperparameter tuning
                 if hypertuning_fn is not None:
-                    print(f"  Running hyperparameter tuning for {model_name}...")
+                    print(f"  Running hyperparameter tuning for {model_name}")
                     
                     # Get parameter grid
                    
@@ -161,7 +147,8 @@ class SimpleAutoML:
                     cv_score = None
                     print(f"  Using default parameters for {model_name}")
                 
-                # Step 2c: Train final model with proper scaling
+                # Step 2c Train final model with proper scaling
+                #use the x train and x test model so it has the right features
                 result = self._train_and_evaluate_with_scaling(
                     model_config, best_params, X_train_model, y_train, X_test_model, y_test, loss_fn, cv_score
                 )
@@ -172,10 +159,10 @@ class SimpleAutoML:
                 result['original_features'] = X_train.shape[1]
                 
                 model_results[model_name] = result
-                print(f"✓ {model_name} - Test {loss_fn.name}: {result['metrics']['test_loss']:.2f} (Features: {X_train_model.shape[1]})")
+                print(f"{model_name} - Test {loss_fn.name}: {result['metrics']['test_loss']:.2f} (Features: {X_train_model.shape[1]})")
 
             except Exception as e:
-                print(f"✗ {model_name} failed: {str(e)}")
+                print(f"{model_name} failed: {str(e)}")
                 model_results[model_name] = {'error': str(e)}
         
         # Step 3: Find best model and store results
@@ -201,13 +188,11 @@ class SimpleAutoML:
         return self.results
 
     def _prepare_data_splits_no_scaling(self, df, test_split):
-        """Split data without scaling - scaling happens within CV"""
         # Get features and target
         feature_cols = [col for col in df.columns if col not in ['date', self.target_col]]
         X = df[feature_cols].copy()
         y = df[self.target_col].copy()
 
-        # --- NEW: Sanitize column names ---
         self.original_feature_names = X.columns.tolist()
         sanitized_cols = {col: re.sub(r'[^a-zA-Z0-9_]', '_', col) for col in X.columns}
         X = X.rename(columns=sanitized_cols)
@@ -227,7 +212,6 @@ class SimpleAutoML:
         return X_train, X_test, y_train, y_test
 
     def _train_and_evaluate_with_scaling(self, model_config, params, X_train, y_train, X_test, y_test, loss_fn, cv_score=None):
-        """Train final model with proper scaling"""
         from helper.helper import helper  # Import helper
         
         # Scale final train/test data
@@ -259,7 +243,6 @@ class SimpleAutoML:
 
     # Add this method to automl.py:
     def _get_best_model(self, model_results, loss_fn):
-        """Get best model based on test metric"""
         valid_results = {name: result for name, result in model_results.items() 
                         if 'error' not in result and 'metrics' in result}
         
@@ -276,7 +259,6 @@ class SimpleAutoML:
         return best_name, valid_results[best_name]
     
     def _print_results(self, loss_fn):
-        """Print results summary"""
         print("\n" + "="*60)
         print("AUTOML RESULTS")
         print("="*60)

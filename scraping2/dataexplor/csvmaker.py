@@ -37,11 +37,11 @@ def analyze_and_convert(json_path, csv_path):
     
     # --- Data Cleaning (Optional but Recommended) ---
     # Ensure 'dato' is a proper datetime format
-    df['dato'] = pd.to_datetime(df['dato'], errors='coerce')
+    #df['dato'] = pd.to_datetime(df['dato'], errors='coerce')
     # Drop rows where the date could not be parsed
-    df.dropna(subset=['dato'], inplace=True)
+    #df.dropna(subset=['dato'], inplace=True)
     
-    print(f"\nData range (by date): {df['dato'].min().date()} to {df['dato'].max().date()}")
+    #print(f"\nData range (by date): {df['dato'].min().date()} to {df['dato'].max().date()}")
 
     # --- CSV Conversion ---
     print(f"\nConverting data to CSV format at '{csv_path}'...")

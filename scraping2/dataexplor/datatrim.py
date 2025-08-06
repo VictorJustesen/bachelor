@@ -33,16 +33,21 @@ def create_simplified_sales_data(input_path, output_path, company_bfe_set):
             is_not_conditional = not ejerskifte.get("betinget")
             is_normal_sale_type = ejerskifte.get("overdragelsesmaade") in VALID_SALE_TYPES
             
-            if is_valid_status and is_not_conditional and is_normal_sale_type:
+            # --- MODIFIED DATE LOGIC ---
+            # Prioritize the official filing date ('anmeldelsesdato') as it's most reliable.
+            sale_date = ejerskifte.get("anmeldelsesdato") or ejerskifte.get("overtagelsesdato")
+
+            if is_valid_status and is_not_conditional and is_normal_sale_type and sale_date:
                 bfe_nummer = ejerskifte.get("bestemtFastEjendomBFENr")
                 if bfe_nummer not in company_bfe_set:
                     hid = ejerskifte.get("handelsoplysningerLokalId")
                     if hid:
                         sales_lookup[hid] = {
                             "bfe_nummer": bfe_nummer,
-                            "salgstype": ejerskifte.get("overdragelsesmaade")
+                            "salgstype": ejerskifte.get("overdragelsesmaade"),
+                            "dato": sale_date  # Store the reliable date
                         }
-    print(f"-> Found {len(sales_lookup)} valid, non-conditional, normal-trade transactions.")
+    print(f"-> Found {len(sales_lookup)} valid, non-conditional, normal-trade transactions with a reliable date.")
 
     print("-> Pass 2/2: Writing simplified and filtered sales data...")
     with open(output_path, 'w', encoding='utf-8') as out_f:
@@ -58,7 +63,6 @@ def create_simplified_sales_data(input_path, output_path, company_bfe_set):
                     kontant_pris = handel.get("kontantKoebesum")
                     samlet_pris = handel.get("samletKoebesum")
 
-                    # Keep the record if at least one of the prices is valid and positive
                     has_valid_price = (kontant_pris is not None and kontant_pris > 0) or \
                                       (samlet_pris is not None and samlet_pris > 0)
 
@@ -66,13 +70,14 @@ def create_simplified_sales_data(input_path, output_path, company_bfe_set):
                         if not is_first_item:
                             out_f.write(',')
                         
+                        sale_info = sales_lookup[handel_id]
                         simplified_sale = {
-                            "bfe_nummer": sales_lookup[handel_id]["bfe_nummer"],
+                            "bfe_nummer": sale_info["bfe_nummer"],
                             "kontant_koebesum": kontant_pris,
                             "samlet_koebesum": samlet_pris,
                             "loesoeresum": handel.get("loesoeresum"),
-                            "salgstype": sales_lookup[handel_id]["salgstype"],
-                            "dato": handel.get("overtagelsesdato") or handel.get("koebsaftaleDato")
+                            "salgstype": sale_info["salgstype"],
+                            "dato": sale_info["dato"]
                         }
                         
                         json.dump(simplified_sale, out_f, ensure_ascii=False)
