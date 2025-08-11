@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+import ijson
 
 class DanishAddressParser:
     """Enhanced Danish address parser for better DAWA integration"""
@@ -171,7 +172,7 @@ def find_best_address_match(dawa_results, parsed_components):
     print("❌ No results with proper adgangsadresse structure found, using first result")
     return dawa_results[0] if dawa_results else None
 
-def get_property_data_enhanced(full_address_string, service_username, service_password):
+def get_property_data_enhanced(full_address_string, service_username, service_password, ejf_data_path):
     """Enhanced property data fetcher with corrected DAWA structure handling"""
     
     print("=" * 80)
@@ -241,6 +242,7 @@ def get_property_data_enhanced(full_address_string, service_username, service_pa
     # Step 3: BFE Number
     print("\n--- Step 3: Getting BFE Property Number ---")
     
+    bfe_nummer = None
     try:
         bfe_nummer = get_bfe_number(adgangsadresse_id, service_username, service_password)
         if bfe_nummer:
@@ -249,23 +251,22 @@ def get_property_data_enhanced(full_address_string, service_username, service_pa
             print("⚠️ Could not find BFE number")
     except Exception as e:
         print(f"❌ Error getting BFE number: {e}")
-        bfe_nummer = None
     
-    # Step 4: Sales History
-    print("\n--- Step 4: Fetching Sales History ---")
-    
+    # Step 4: Fetching Sales History from Local File using Streaming
+    print("\n--- Step 4: Fetching Sales History from Local File (Streaming) ---")
     sales_history = []
     if bfe_nummer:
         try:
-            sales_history = get_sales_history(bfe_nummer, service_username, service_password)
+            # This is the updated function call using the file path
+            sales_history = get_sales_history(bfe_nummer, ejf_data_path)
             if sales_history:
-                print(f"✅ Found {len(sales_history)} sales record(s)")
-                for sale in sales_history[:3]:  # Show first 3
-                    print(f"  📅 {sale.get('handelsdato')}: {sale.get('koebesum')} DKK")
+                print(f"✅ Found {len(sales_history)} sales record(s) from local file")
+                for sale in sales_history[:3]:
+                    print(f"  📅 {sale.get('koebsaftaleDato') or 'N/A'}: {sale.get('samletKoebesum')} {sale.get('valutakode')}")
             else:
-                print("ℹ️ No sales history found")
+                print("ℹ️ No sales history found for this BFE number in the local file")
         except Exception as e:
-            print(f"❌ Error fetching sales history: {e}")
+            print(f"❌ Error fetching sales history from file: {e}")
     
     # Compile comprehensive result
     result = {
@@ -346,22 +347,47 @@ def get_bfe_number(adgangsadresse_id, service_username, service_password):
     
     return None
 
-def get_sales_history(bfe_nummer, service_username, service_password):
-    """Get sales history from Ejerfortegnelsen"""
-    ejer_endpoint = "https://services.datafordeler.dk/EJERFORTEGNELSE/Ejerfortegnelsen/1/rest/Handelsoplysning"
-    ejer_params = {
-        "BFEnr": bfe_nummer,
-        "username": service_username,
-        "password": service_password
-    }
+def get_sales_history(bfe_nummer, ejf_data_path):
+    """
+    Get sales history from a large Ejerfortegnelsen JSON data file
+    using a streaming parser to conserve memory.
+    """
     
-    response_ejer = requests.get(ejer_endpoint, params=ejer_params)
+    # --- Phase 1: Stream to find all relevant handelsoplysningerLokalId ---
     
-    if response_ejer.status_code != 200:
-        print(f"⚠️ Ejerfortegnelsen error: {response_ejer.status_code} {response_ejer.reason}")
+    print("Streaming Phase 1: Finding ownership changes...")
+    handelsoplysninger_ids = set()
+    try:
+        with open(ejf_data_path, 'r', encoding='utf-8') as f:
+            # Target items inside the EjerskifteList array
+            ejerskifter = ijson.items(f, 'EjerskifteList.item')
+            for ejerskifte in ejerskifter:
+                if ejerskifte.get("bestemtFastEjendomBFENr") == bfe_nummer:
+                    hid = ejerskifte.get("handelsoplysningerLokalId")
+                    if hid:
+                        handelsoplysninger_ids.add(hid)
+    except FileNotFoundError:
+        print(f"❌ ERROR: Data file not found at {ejf_data_path}.")
         return []
-    
-    return response_ejer.json() or []
+    except Exception as e:
+        print(f"💥 An error occurred during streaming phase 1: {e}")
+        return []
+
+    if not handelsoplysninger_ids:
+        return []
+
+    # --- Phase 2: Stream again to find the matching trade details ---
+
+    print("Streaming Phase 2: Finding trade details...")
+    sales_history = []
+    with open(ejf_data_path, 'r', encoding='utf-8') as f:
+        # Target items inside the HandelsoplysningerList array
+        handelsoplysninger = ijson.items(f, 'HandelsoplysningerList.item')
+        for handel in handelsoplysninger:
+            if handel.get('id_lokalId') in handelsoplysninger_ids:
+                sales_history.append(handel)
+
+    return sales_history
 
 def get_specific_apartment_data(full_address_string, service_username, service_password):
     """Get data for a SPECIFIC apartment unit"""
@@ -535,18 +561,22 @@ def get_building_units(bygning_id, service_username, service_password):
 if __name__ == '__main__':
     service_user_name = "XEVPPQIYSU"
     service_user_password = "Luffygear3!"
-    address_to_search = "sølvgade 3 5 th "  # Specific apartment
+    address_to_search = "bolbro sidevej 6, 2960 rungsted kyst"
     
-    print("🆚 COMPARING APARTMENT-SPECIFIC vs BUILDING-WIDE DATA")
+    # Define the path to your large JSON file
+    ejf_data_path = './dataexplor/test_tdyt_1__20250627184206.json'
+
     print("=" * 80)
     
     try:
-        # Get data for the specific apartment
-        specific_result = get_property_data_enhanced(address_to_search, service_user_name, service_user_password)
-        
-        
-        
+        # Pass the file path directly, no need to load the file here
+        property_result = get_property_data_enhanced(
+            address_to_search,
+            service_user_name,
+            service_user_password,
+            ejf_data_path
+        )
     except Exception as e:
-        print(f"💥 Error: {e}")
+        print(f"💥 A critical error occurred during the property data fetch: {e}")
         import traceback
         traceback.print_exc()

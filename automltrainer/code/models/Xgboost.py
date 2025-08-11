@@ -14,32 +14,27 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         self.subsample = subsample
         self.colsample_bytree = colsample_bytree
         self.random_state = random_state
-        self.loss_fn = loss_fn  # Store custom loss function
+        self.loss_fn = loss_fn  
         self.kwargs = kwargs
         self.model = None
     
-    def _get_xgb_objective(self, loss_fn):
-        """Map custom loss function to XGBoost objective"""
+    def get_xgb_objective(self, loss_fn):
         if loss_fn is None:
-            return 'reg:squarederror'  # Default
-            
+            return 'reg:squarederror'  
         loss_name = loss_fn.name.lower()
         if loss_name == 'mae':
             return 'reg:absoluteerror'
         elif loss_name == 'rmse':
             return 'reg:squarederror'
         else:
-            return 'reg:squarederror'  # Fallback
+            return 'reg:squarederror' 
     
-    # BaseModelConfig methods (configuration interface)
     def get_model(self, loss_fn=None, **kwargs):
-        """Create XGBoost model with default parameters"""
         default_params = {
-            'random_state': 42,
             'n_estimators': 100,
             'learning_rate': 0.1,
             'max_depth': 6,
-            'loss_fn': loss_fn  # Pass loss function
+            'loss_fn': loss_fn  
         }
         params = {**default_params, **kwargs}
         return XGBoostConfig(**params)
@@ -48,7 +43,6 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         return 'xgboost'
     
     def get_param_grid(self, grid_type):
-        """Get parameter grid for hyperparameter tuning"""
         grids = {
             'small': {
                 'n_estimators': [100, 200],
@@ -74,7 +68,7 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
     def fit(self, X, y):
         """Fit the XGBoost model"""
         # Map custom loss to XGBoost objective
-        objective = self._get_xgb_objective(self.loss_fn)
+        objective = self.get_xgb_objective(self.loss_fn)
         
         self.model = xgb.XGBRegressor(
             n_estimators=self.n_estimators,
@@ -83,20 +77,16 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             subsample=self.subsample,
             colsample_bytree=self.colsample_bytree,
             random_state=self.random_state,
-            objective=objective,  # Use mapped objective
+            objective=objective,  
             **self.kwargs
         )
         self.model.fit(X, y)
         return self
     
     def predict(self, X):
-        """Make predictions"""
-        if self.model is None:
-            raise ValueError("Model not fitted yet. Call fit() first.")
         return self.model.predict(X)
     
     def get_params(self, deep=True):
-        """Get parameters for this estimator"""
         return {
             'n_estimators': self.n_estimators,
             'learning_rate': self.learning_rate,

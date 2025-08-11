@@ -53,18 +53,15 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             'small': {
                 'model_type': ['linear', 'ridge'],
                 'alpha': [0.1, 1.0, 10.0],
-                'fit_intercept': [True]
             },
             'big': {
                 'model_type': ['linear', 'ridge', 'lasso', 'elastic'],
                 'alpha': [0.01, 0.1, 1.0, 10.0, 100.0],
                 'l1_ratio': [0.1, 0.5, 0.7, 0.9],
-                'fit_intercept': [True, False]
             },
             'custom': {
                 'model_type': ['ridge', 'lasso'],
                 'alpha': [0.1, 1.0, 10.0],
-                'fit_intercept': [True]
             }
         }
         return grids.get(grid_type, grids['small'])

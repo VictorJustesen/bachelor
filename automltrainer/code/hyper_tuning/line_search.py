@@ -20,7 +20,7 @@ class LineSearchTuner(HypertuningInterface):
         for pass_num in range(self.max_passes):
             pass_improved = False
             if self.verbose > 0:
-                print(f"\n--- Pass {pass_num + 1}/{self.max_passes} ---")
+                print(f"\n Pass {pass_num + 1}/{self.max_passes}")
 
             for param_name, param_values in self.param_grid.items():
                 param_scores = {}
