@@ -10,3 +10,4 @@ node_modules/
 .terraform*
 terraform.tfstate*
 database/database-data/*
+scraping2/dataexplor/*.json
