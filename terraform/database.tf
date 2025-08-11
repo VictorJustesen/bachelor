@@ -3,9 +3,9 @@ resource "azurerm_postgresql_flexible_server" "db_server" {
   name                   = "bachelor-postgres-server" # Choose a unique name
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
-  zone                   = "1" # Add this line to pin the zone
+  zone                   = "1" 
   version                = "13"
-  sku_name               = "B_Standard_B1ms" # This SKU is eligible for the Azure Free Tier
+  sku_name               = "B_Standard_B1ms" 
 
   administrator_login    = "dev_user"
   administrator_password = "YourSecurePassword123!" # Hardcoded as requested
