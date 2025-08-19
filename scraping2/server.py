@@ -2,15 +2,45 @@ import os
 import sys
 import random
 import re
+import json
+import numpy as np
+import pandas as pd  # ADD THIS LINE
+
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-sys.path.append(os.path.dirname(__file__))
-from property_scraper import scrape_property_data
+# --- NEW: Import the FeatureGenerator class ---
+from FeatureGenerator import FeatureGenerator
 
 app = FastAPI()
+
+# --- NEW: A global variable to hold the feature service instance ---
+# We will initialize this at startup to avoid reloading the data on every request.
+feature_service: FeatureGenerator = None
+
+# --- NEW: Use FastAPI's startup event to load the model ---
+@app.on_event("startup")
+def load_feature_generator():
+    """
+    This function runs when the server starts. It loads the data and 
+    initializes the FeatureGenerator, making it ready to handle requests.
+    """
+    global feature_service
+    
+    # Make the data path configurable via an environment variable
+    data_path = os.environ.get("DATA_FILE_PATH", "dataexplor/cleaned_data_with_bfe_coords.csv")
+    
+    if not os.path.exists(data_path):
+        # If the data isn't found, the server can't start.
+        raise FileNotFoundError(f"CRITICAL: Data file not found at '{data_path}'. The server cannot start.")
+        
+    print("Initializing FeatureGenerator for the service...")
+    feature_service = FeatureGenerator(data_path=data_path)
+    # The "Initialization complete. Service is ready." message will print here.
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,9 +52,6 @@ app.add_middleware(
 
 PORT = int(os.environ.get('PORT', 9000))
 
-SERVICE_USERNAME = "XEVPPQIYSU"
-SERVICE_PASSWORD = "Luffygear3!"
-
 class ScrapeBuildingRequest(BaseModel):
     address: str
 
@@ -32,140 +59,93 @@ class ScrapeHistoryRequest(BaseModel):
     address: str
     zip: str
 
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif pd.isna(obj) if 'pd' in globals() else str(obj) == 'nan':
+        return None
+    else:
+        return obj
+
+
+# --- MODIFIED: The endpoint now uses the feature generator ---
 @app.post('/scrape/building-info')
 async def scrape_building_info(req: ScrapeBuildingRequest):
-    
     address = req.address
-    print(f'Scraping building info for: {address}')
-    print("hey")
+    print(f'Generating features for: {address}')
+    
+    if feature_service is None:
+        print('FeatureGenerator not available, using mock data')
+        return generate_mock_building_data(address)
     
     try:
-        python_result = call_property_scraper(address)
+        features = feature_service.generate_for_address(address)
         
-        if python_result.get('success') and python_result.get('data'):
-            data = python_result['data']
+        if features:
+            # Extra safety: convert any remaining numpy types
+            features = convert_numpy_types(features)
             
             return {
-                'address': data.get('address'),
-                'sqm': extract_sqm_from_data(data.get('apartment_data')),
-                'rooms': extract_rooms_from_data(data.get('apartment_data')),
-                'year': extract_year_from_data(data.get('building_data')),
-                'zip': extract_zip_from_address(data.get('address')),
-                'city': extract_city_from_address(data.get('address')),
-                'buildingType': extract_building_type(data.get('building_data')),
-                'coordinates': data.get('coordinates'),
-                'salesHistory': data.get('sales_history'),
-                'source': 'danish_property_scraper',
-                'apartment_id': data.get('apartment_id'),
-                'adgangsadresse_id': data.get('adgangsadresse_id'),
-                'bfe_number': data.get('bfe_number')
+                'address': features.get('full_address', address),
+                'sqm': features.get('m2'),
+                'rooms': features.get('Vär.'),  # Note: using Vær. for rooms/floors
+                'year': features.get('byggeaar'),
+                'zip': str(features.get('postnummer', '')),
+                'city': features.get('by'),
+                'buildingType': features.get('btype'),
+                'coordinates': [features.get('y'), features.get('x')] if features.get('y') and features.get('x') else None,
+                'source': 'feature_generator_service',
+                'all_features': features  # This should now be JSON serializable
             }
         else:
-            print('Python scraper returned no data, using mock data')
+            print('Feature generation failed, using mock data')
             return generate_mock_building_data(address)
             
     except Exception as error:
-        print(f'Property scraping failed: {error}')
+        print(f'Feature generation error: {error}')
         return generate_mock_building_data(address)
 
+
+# This endpoint is unchanged, but you could also integrate it if needed
 @app.post('/scrape/property-history')
 async def scrape_property_history(req: ScrapeHistoryRequest):
     address = req.address
     zip_code = req.zip
-    
+    print(f'Getting property history for: {address}')
+
     try:
-        print(f'Scraping property history for: {address}, {zip_code}')
+        # Use the new method from our initialized feature_service
+        history = feature_service.get_sales_history_for_address(address)
         
-        python_result = call_property_scraper(address)
-        
-        if python_result.get('success') and python_result.get('data'):
-            data = python_result['data']
-            
-            return {
-                'address': data.get('address'),
-                'zip': extract_zip_from_address(data.get('address')),
-                'salesHistory': data.get('sales_history', []),
-                'source': 'danish_property_scraper'
-            }
-        else:
+        # The method returns a list if successful (even an empty one for no sales) 
+        # or None if the address lookup itself failed.
+        if history is not None:
             return {
                 'address': address,
                 'zip': zip_code,
-                'salesHistory': [
-                    {
-                        'date': "2023-01-15",
-                        'price': random.randint(1000000, 3000000)
-                    }
-                ],
-                'source': 'mock_fallback'
+                'salesHistory': history, # This will be the list from our new method
+                'source': 'feature_generator_dataset'
             }
-            
+        else:
+            # If history is None, it means the address could not be found by DAWA.
+            raise HTTPException(status_code=404, detail="Address not found or could not be identified.")
+
     except Exception as error:
-        print(f'Property history scraping failed: {error}')
+        print(f'Property history lookup failed: {error}')
+        # This will catch any unexpected errors during the process
         raise HTTPException(status_code=500, detail='Failed to get property history')
 
-def call_property_scraper(address):
-    try:
-        result = scrape_property_data(address, SERVICE_USERNAME, SERVICE_PASSWORD)
-        return {'success': True, 'data': result}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def extract_sqm_from_data(apartment_data):
-    if not apartment_data or not isinstance(apartment_data, list):
-        return None
-    
-    for apartment in apartment_data:
-        if apartment.get('enh027ArealTilBeboelse'):
-            return float(apartment['enh027ArealTilBeboelse'])
-        if apartment.get('enh026EnhedensSamledeAreal'):
-            return float(apartment['enh026EnhedensSamledeAreal'])
-    return None
-
-def extract_rooms_from_data(apartment_data):
-    if not apartment_data or not isinstance(apartment_data, list):
-        return None
-    
-    for apartment in apartment_data:
-        if apartment.get('enh031AntalVærelser'):
-            return int(apartment['enh031AntalVærelser'])
-    return None
-
-def extract_year_from_data(building_data):
-    if not building_data or not isinstance(building_data, list):
-        return None
-    
-    for building in building_data:
-        if building.get('byg026Opførelsesår'):
-            return int(building['byg026Opførelsesår'])
-    return None
-
-def extract_zip_from_address(address):
-    if not address:
-        return None
-    zip_match = re.search(r'\b\d{4}\b', address)
-    return zip_match.group(0) if zip_match else None
-
-def extract_city_from_address(address):
-    if not address:
-        return None
-    parts = address.split(' ')
-    return parts[-1] if parts else None
-
-def extract_building_type(building_data):
-    if not building_data or not isinstance(building_data, list):
-        return 'Unknown'
-    
-    for building in building_data:
-        if building.get('byg021BygningensAnvendelse'):
-            code = building['byg021BygningensAnvendelse']
-            if code == "120":
-                return "Residential Building"
-            if code == "920":
-                return "Auxiliary Building"
-            return f"Building Type {code}"
-    return 'Residential Building'
-
+# Mock data function is unchanged
 def generate_mock_building_data(address):
     return {
         'address': address,
@@ -181,5 +161,6 @@ def generate_mock_building_data(address):
     }
 
 if __name__ == '__main__':
-    print(f'Scraping server running on port {PORT}')
+    # You still run the server the same way
+    print(f'Scraping and feature server running on port {PORT}')
     uvicorn.run(app, host='0.0.0.0', port=PORT)

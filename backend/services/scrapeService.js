@@ -50,7 +50,7 @@ const getPropertyHistory = async (req, res) => {
     console.log(`Requesting property history from scraper service for: ${address}`);
     
     // You can add a property history endpoint to your scraping2 service
-    const response = await axios.post(`${SCRAPER_SERVICE_URL}/scrape/not made yet`, {
+    const response = await axios.post(`${SCRAPER_SERVICE_URL}/scrape/property-history`, {
       address: address,
       zip: zip
     }, {

@@ -17,25 +17,30 @@ const Free = forwardRef(({ map }, ref) => {
   }));
 
   // This function is called from App.jsx when a search result is selected in the Header
-  const handleLocationSelect = (result) => {
-    const [lng, lat] = result.center;
+const handleLocationSelect = (result) => {
+  const [lng, lat] = result.center;
 
-    map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true });
+  map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true });
 
-    const selectedDataObj = {
-      address: result.place_name || result.address,
-      salesHistory: []
-    };
-    setSelectedData(selectedDataObj);
-    setVisible(true); // Ensure the overlay is visible when a location is selected
-    setEstimatedPrice(null); // Clear any previous price estimate
+  // 👇 EXTRACT ZIP FROM ADDRESS
+  const address = result.place_name || result.address;
+  const zipMatch = address.match(/\b\d{4}\b/); // Extract 4-digit postal code
+  const extractedZip = zipMatch ? zipMatch[0] : null;
 
-    // Fetch property information after a short delay to allow the map to animate
-    setTimeout(() => {
-      handleFetchInformation(selectedDataObj);
-    }, 500);
+  const selectedDataObj = {
+    address: address,
+    zip: extractedZip,  // 👈 ADD THIS!
+    salesHistory: []
   };
+  
+  setSelectedData(selectedDataObj);
+  setVisible(true);
+  setEstimatedPrice(null);
 
+  setTimeout(() => {
+    handleFetchInformation(selectedDataObj);
+  }, 500);
+};
   async function handleFetchInformation(dataOverride = null) {
     const currentData = dataOverride || selectedData;
 

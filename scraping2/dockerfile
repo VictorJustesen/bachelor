@@ -2,22 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install requirements directly in Dockerfile
-RUN pip install --no-cache-dir \
-    flask \
-    flask-cors \
-    requests \
-    beautifulsoup4 \
-    lxml \
-    pandas \
-    numpy \
-    urllib3 \
-    fastapi \
-    uvicorn[standard]
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application files
+# Copy requirements first (create this file)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application code
 COPY . .
+
+# Make sure the data file is included
+RUN ls -la dataexplor/
 
 EXPOSE 9000
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["python", "server.py"]

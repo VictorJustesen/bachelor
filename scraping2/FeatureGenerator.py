@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 import requests
@@ -6,144 +7,42 @@ from sklearn.neighbors import BallTree
 from typing import Dict, Any, Optional
 
 # --- Configuration ---
-# It's recommended to load these from environment variables or a config file
 DATA_FORDELER_USERNAME = os.environ.get("DATAFORDELER_USERNAME", "XEVPPQIYSU")
 DATA_FORDELER_PASSWORD = os.environ.get("DATAFORDELER_PASSWORD", "Luffygear3!")
 
 class FeatureGenerator:
-    """
-    A high-performance service to generate a rich feature vector for a Danish real estate property.
-
-    This class is designed to be instantiated once at application startup. It pre-loads
-    and pre-processes all necessary historical data to ensure low-latency feature
-    generation for individual addresses on-demand.
-    """
-
     def __init__(self, data_path: str):
-        """
-        Initializes the service by loading data and pre-computing indices.
-
-        Args:
-            data_path (str): The file path to the 'cleaned_data_with_bfe_coords.csv' dataset.
-        """
         print("Initializing FeatureGenerator...")
         self.main_df = self._load_and_prepare_data(data_path)
         self.spatial_index = self._build_spatial_index()
         print("Initialization complete. Service is ready.")
 
-    def _load_and_prepare_data(self, data_path: str) -> pd.DataFrame:
+    def _get_dawa_address_data(self, address_query: str) -> Optional[list]:
         """
-        Loads the historical sales data from a CSV file into a pandas DataFrame,
-        performing necessary type conversions and optimizations.
+        Gets address data from DAWA API - rewritten from property_scraper.
         """
-        print(f"Loading data from {data_path}...")
-        dtype_map = {
-            'bfe_nummer': 'int64',
-            'postnummer': 'int32',
-            'Vær.': 'int16',
-            'område_Bornholm': 'int8',
-            'område_Fyn og øer': 'int8',
-            '"område_Hovedstaden, København"': 'int8',
-            'område_Nordjylland': 'int8',
-            'område_Nordsjælland': 'int8',
-            'område_Sydjylland': 'int8',
-            'område_Øst- og Midtjylland': 'int8',
-        }
-        df = pd.read_csv(data_path, dtype=dtype_map, low_memory=False)
-        # Filter for postnummer 2960 and date range
-        df_filtered = df[
-        (df['postnummer'] == 2960) & 
-        (pd.to_datetime(df['dato']) >= '2024-01-01') & 
-        (pd.to_datetime(df['dato']) <= '2025-08-18')
-        ]
-
-        print(f"Properties from postnummer 2960 sold between 2024-01-01 and 2025-08-18: {len(df_filtered)}")
-        df['dato'] = pd.to_datetime(df['dato'])
-        # The column name from the CSV has quotes, we rename it for easier access
-        df.rename(columns={'\"område_Hovedstaden, København\"': 'område_Hovedstaden_København'}, inplace=True)
-        # Assuming 'by' can be inferred from postnummer name if not present
-        # This is a placeholder; in a real scenario, a proper city mapping would be needed.
-       
-        print("Data loaded and prepared.")
-        return df
-
-    def _build_spatial_index(self) -> BallTree:
-        """
-        Constructs a BallTree spatial index for efficient nearest-neighbor searches.
-        The coordinates are converted to radians as required by the Haversine metric.
-        """
-        print("Building spatial index...")
-        # Haversine metric requires coordinates in [latitude, longitude] order in radians
-        coords_radians = np.radians(self.main_df[['y', 'x']].values)
-        tree = BallTree(coords_radians, metric='haversine')
-        print("Spatial index built successfully.")
-        return tree
-
-    def _get_dawa_data(self, full_address_query: str) -> Optional[Dict[str, Any]]:
-        """
-        Queries the Danmarks Adressers Web API (DAWA) to resolve an address string.
-
-        Args:
-            full_address_query (str): The address to search for.
-
-        Returns:
-            A dictionary containing key address information, or None if not found.
-        """
-        dawa_url = "https://api.dataforsyningen.dk/adresser"
         try:
-            dawa_resp = requests.get(dawa_url, params={'q': full_address_query}, timeout=30)
-            dawa_resp.raise_for_status()
-            dawa_data = dawa_resp.json()
-
-            if not dawa_data:
-                print(f"DAWA API: No address found for query: {full_address_query}")
-                return None
-
-            address_info = dawa_data[0]
-            adgangsadresse = address_info.get('adgangsadresse', {})
-
-            coords = None
-            # The coordinates are stored in a list: [x, y]
-            coords_list = adgangsadresse.get('adgangspunkt', {}).get('koordinater')
-            if coords_list and len(coords_list) == 2:
-                coords = {'x': coords_list[0], 'y': coords_list[1]}
-        
-            
-            return {
-                'adresseId': address_info.get('id'),
-                'husnummer_id': adgangsadresse.get('id'),
-                'postnummer': int(adgangsadresse.get('postnummer', {}).get('nr')),
-                'by': adgangsadresse.get('postnummer', {}).get('navn'),
-               'x': coords['x'] if coords else None,
-            'y': coords['y'] if coords else None
+            dawa_url = "https://api.dataforsyningen.dk/adresser"
+            params = {
+                'q': address_query,
+                'struktur': 'nestet',
+                'fuzzy': ''
             }
+            
+            response = requests.get(dawa_url, params=params, timeout=30)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"DAWA API failed with status: {response.status_code}")
+                return None
+                
         except requests.RequestException as e:
             print(f"Error calling DAWA API: {e}")
             return None
-        
-    def _get_bbr_data(self, address_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+
+    def _get_apartment_data(self, apartment_id: str) -> Optional[list]:
         """
-        Gets building/unit data from BBR following the official API documentation.
-        """
-        # First try to get apartment/unit data if we have an address ID
-        if address_info.get('adresseId'):
-            unit_data = self._get_apartment_data(address_info['adresseId'])
-            if unit_data:
-                print(unit_data)
-                return self._parse_unit_data(unit_data)
-    
-        # Fallback to building data using husnummer_id
-        if address_info.get('husnummer_id'):
-            building_data = self._get_building_data(address_info['husnummer_id'])
-            if building_data:
-                return self._parse_building_data(building_data)
-    
-        return None
-    def _map_bbr_unit_to_btype(self, anvendelse_kode: str) -> str:
-        return "Villa"
-    def _get_apartment_data(self, apartment_id: str) -> Optional[Dict]:
-        """
-        Gets apartment/unit data using the same approach as your working code.
+        Gets apartment data from BBR - rewritten from property_scraper.
         """
         enhed_endpoint = "https://services.datafordeler.dk/BBR/BBRPublic/1/rest/enhed"
         params = {
@@ -155,15 +54,14 @@ class FeatureGenerator:
         try:
             response = requests.get(enhed_endpoint, params=params, timeout=30)
             if response.status_code == 200:
-                data = response.json()
-                return data[0] if isinstance(data, list) and data else data
+                return response.json() or []
         except requests.RequestException as e:
             print(f"Error getting apartment data: {e}")
-        return None
+        return []
 
-    def _get_building_data(self, adgangsadresse_id: str) -> Optional[Dict]:
+    def _get_building_data(self, adgangsadresse_id: str) -> Optional[list]:
         """
-        Gets building data using the same approach as your working code.
+        Gets building data from BBR - rewritten from property_scraper.
         """
         bygning_endpoint = "https://services.datafordeler.dk/BBR/BBRPublic/1/rest/bygning"
         params = {
@@ -175,178 +73,256 @@ class FeatureGenerator:
         try:
             response = requests.get(bygning_endpoint, params=params, timeout=30)
             if response.status_code == 200:
-                data = response.json()
-                return data[0] if isinstance(data, list) and data else data
+                return response.json() or []
         except requests.RequestException as e:
             print(f"Error getting building data: {e}")
+        return []
+
+    def _get_bfe_from_address(self, address_id: str) -> Optional[int]:
+        """
+        Gets BFE number from address ID - rewritten from property_scraper.
+        """
+        unit_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/adresseTilEnhedBfe"
+        params = {
+            "adresseId": address_id,
+            "username": DATA_FORDELER_USERNAME,
+            "password": DATA_FORDELER_PASSWORD
+        }
+        
+        try:
+            resp = requests.get(unit_url, params=params, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # Handle different response formats
+                if isinstance(data, list) and data:
+                    first_item = data[0]
+                    if isinstance(first_item, dict):
+                        return first_item.get('bfeNummer')
+                    elif isinstance(first_item, int):
+                        return first_item
+                elif isinstance(data, int):
+                    return data
+                elif isinstance(data, dict):
+                    return data.get('bfeNummer')
+                    
+        except requests.RequestException as e:
+            print(f"Error getting BFE from address: {e}")
         return None
 
-    def _parse_unit_data(self, unit_data: Dict) -> Dict[str, Any]:
+    def _get_bfe_from_building(self, husnummer_id: str) -> Optional[int]:
         """
-        Parses apartment/unit data from BBR response.
+        Gets BFE number from building - rewritten from property_scraper.
         """
-        # Get unit area (apartment size)
-        unit_areal = unit_data.get('EnhedAreal', {})
-        m2_value = unit_areal.get('value') if isinstance(unit_areal, dict) else unit_areal
-        
-        # Get floor information
-        etage = unit_data.get('enh031AntalVærelser', {})
-        etage_value = etage.get('value', 1) if isinstance(etage, dict) else (etage or 1)
-        
-        # Get unit use code
-        anvendelse = unit_data.get('EnhedAnvendelse', {})
-        anvendelse_kode = anvendelse.get('kode') if isinstance(anvendelse, dict) else anvendelse
-    
-        return {
-            'btype': self._map_bbr_unit_to_btype(anvendelse_kode),
-            'm2': m2_value,
-            'Vær.': etage_value,  # Floor number for apartments
-            'byggeaar': unit_data.get('OpfoerelsesAar', {}).get('value') if isinstance(unit_data.get('OpfoerelsesAar', {}), dict) else unit_data.get('OpfoerelsesAar')
+        building_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/husnummerTilBygningBfe"
+        params = {
+            "husnummerid": husnummer_id,
+            "username": DATA_FORDELER_USERNAME,
+            "password": DATA_FORDELER_PASSWORD
         }
-
-    def _parse_building_data(self, building_data: Dict) -> Dict[str, Any]:
-        """
-        Parses building data from BBR response.
-        """
-        # Get total building area
-        samlet_areal = building_data.get('SamletBygningsareal', {})
-        m2_value = samlet_areal.get('value') if isinstance(samlet_areal, dict) else samlet_areal
-    
-        # Get number of floors
-        antal_etager = building_data.get('AntalEtager', {})
-        etager_value = antal_etager.get('value', 1) if isinstance(antal_etager, dict) else (antal_etager or 1)
         
-        # Get building use code
-        anvendelse = building_data.get('BygAnvendelse', {})
-        anvendelse_kode = anvendelse.get('kode') if isinstance(anvendelse, dict) else anvendelse
-    
-        return {
-            'btype': self._map_bbr_to_btype(anvendelse_kode),
-            'm2': m2_value,
-            'Vær.': etager_value,  # Number of floors for houses
-            'byggeaar': building_data.get('OpfoerelsesAar', {}).get('value') if isinstance(building_data.get('OpfoerelsesAar', {}), dict) else building_data.get('OpfoerelsesAar')
-        }
-    
-    def _get_bfe_number(self, address_info: Dict[str, Any]) -> Optional[int]:
-        """
-        Retrieves the BFE number using a try-fallback strategy for apartments vs. houses.
-
-        Args:
-            address_info: The dictionary returned by _get_dawa_data.
-
-        Returns:
-            The BFE number as an integer, or None if not found.
-        """
-        auth = (DATA_FORDELER_USERNAME, DATA_FORDELER_PASSWORD)
-        
-        # 1. Primary Attempt (for apartments/units)
-        if address_info.get('adresseId'):
-            unit_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/adresseTilEnhedBfe"
-            params = {"adresseId": address_info['adresseId'], "username": DATA_FORDELER_USERNAME,
-                "password": DATA_FORDELER_PASSWORD
-            }
-            try:
-                resp = requests.get(unit_url, params=params,  timeout=30)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    print(f"Unit API response: {data}")  # Debug print
-                    
-                    # Handle different response formats
-                    if isinstance(data, list) and data:
-                        # Response is a list of objects
-                        first_item = data[0]
-                        if isinstance(first_item, dict):
-                            return first_item.get('bfeNummer')
-                        elif isinstance(first_item, int):
-                            return first_item
-                    elif isinstance(data, int):
-                        # Response is directly an integer
-                        return data
-                    elif isinstance(data, dict):
-                        # Response is a single object
-                        return data.get('bfeNummer')
-            except requests.RequestException as e:
-                print(f"API call to adresseTilEnhedBfe failed: {e}")
-
-        # 2. Fallback (for houses/buildings)
-        if address_info.get('husnummer_id'):
-            building_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/husnummerTilBygningBfe"
-            params = {"husnummerid": address_info['husnummer_id'], "username": DATA_FORDELER_USERNAME,
-                "password": DATA_FORDELER_PASSWORD
-            }
-            try:
-                resp = requests.get(building_url, params=params, timeout=30)
-                if resp.status_code != 200:
-                    return None
+        try:
+            resp = requests.get(building_url, params=params, timeout=30)
+            if resp.status_code == 200:
+                building_data = resp.json()
                 
-                building_data =resp.json()
-
-                # 4. Extract BFE number from the correct location in response
-                if building_data:
-                    # Try to get BFE from jordstykkeList first
+                if isinstance(building_data, list) and building_data:
+                    first_building = building_data[0]
+                    if isinstance(first_building, dict):
+                        jordstykke_list = first_building.get('jordstykkeList', [])
+                        if jordstykke_list and len(jordstykke_list) > 0:
+                            bfe_number = jordstykke_list[0].get('samletFastEjendom')
+                            if bfe_number:
+                                return bfe_number
+                    elif isinstance(first_building, int):
+                        return first_building
+                elif isinstance(building_data, int):
+                    return building_data
+                elif isinstance(building_data, dict):
                     jordstykke_list = building_data.get('jordstykkeList', [])
                     if jordstykke_list and len(jordstykke_list) > 0:
                         bfe_number = jordstykke_list[0].get('samletFastEjendom')
                         if bfe_number:
                             return bfe_number
-            except requests.RequestException as e:
-                print(f"API call to husnummerTilBygningBfe failed: {e}")
-
-        print("Could not retrieve BFE number for the address.")
+                            
+        except requests.RequestException as e:
+            print(f"Error getting BFE from building: {e}")
         return None
 
-    def _calculate_all_features(self, address_info: Dict[str, Any], bfe_nummer: int) -> Dict[str, Any]:
+    def _get_dawa_data(self, full_address_query: str) -> Optional[Dict[str, Any]]:
         """
-        Modified to handle properties with no sales history.
+        Uses DAWA lookup to get address information.
         """
-        features = {}
+        try:
+            dawa_results = self._get_dawa_address_data(full_address_query)
+            
+            if not dawa_results:
+                print(f"No DAWA results for: {full_address_query}")
+                return None
+            
+            # Take the first (best) result
+            address_data = dawa_results[0]
+            
+            # Extract coordinates from your format
+            coords = address_data.get('adgangsadresse', {}).get('adgangspunkt', {}).get('koordinater', [])
+            
+            return {
+                'adresseId': address_data.get('id'),
+                'husnummer_id': address_data.get('adgangsadresse', {}).get('id'),
+                'postnummer': int(address_data.get('adgangsadresse', {}).get('postnummer', {}).get('nr', 0)),
+                'by': address_data.get('adgangsadresse', {}).get('postnummer', {}).get('navn', ''),
+                'x': coords[0] if len(coords) >= 2 else None,
+                'y': coords[1] if len(coords) >= 2 else None,
+                'full_address': address_data.get('adressebetegnelse', full_address_query)
+            }
+            
+        except Exception as e:
+            print(f"Error in DAWA lookup: {e}")
+            return None
 
-        # Get property history (might be empty)
-        prop_history = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato').copy()
-        
-        # Define cohorts (these work regardless of sales history)
-        postnummer_cohort = self.main_df[self.main_df['postnummer'] == address_info['postnummer']].copy()
-        by_cohort = self.main_df[self.main_df['by'] == address_info['by']].copy()
+    def _get_bfe_number(self, address_info: Dict[str, Any]) -> Optional[int]:
+        """
+        Gets BFE number using both address and building methods.
+        """
+        try:
+            # Try address-based lookup first (for apartments)
+            if address_info.get('adresseId'):
+                bfe_result = self._get_bfe_from_address(address_info['adresseId'])
+                if bfe_result:
+                    return bfe_result
 
-        # Calculate features (now handles empty prop_history)
-        self._calculate_core_features(features, prop_history, address_info)
-        self._calculate_benchmark_features(features, postnummer_cohort, by_cohort)
-        self._calculate_geospatial_features(features, address_info)
+            # Fallback to building-based lookup (for houses)
+            if address_info.get('husnummer_id'):
+                bfe_result = self._get_bfe_from_building(address_info['husnummer_id'])
+                if bfe_result:
+                    return bfe_result
+
+            print("Could not retrieve BFE number")
+            return None
+
+        except Exception as e:
+            print(f"Error getting BFE number: {e}")
+            return None
+
+    def _get_bbr_data(self, address_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Gets BBR data using both apartment and building methods.
+        """
+        # Try apartment data first
+        if address_info.get('adresseId'):
+            apartment_data = self._get_apartment_data(address_info['adresseId'])
+            if apartment_data:
+                return self._extract_apartment_features(apartment_data)
+
+        # Fallback to building data
+        if address_info.get('husnummer_id'):
+            building_data = self._get_building_data(address_info['husnummer_id'])
+            if building_data:
+                return self._extract_building_features(building_data)
+
+        return None
+
+    def _extract_apartment_features(self, apartment_data: list) -> Dict[str, Any]:
+        """
+        Extracts features from apartment data using proven field names.
+        """
+        if not apartment_data:
+            return {}
+
+        apartment = apartment_data[0]
         
-        # Only calculate historical premiums if we have sales history
-        if not prop_history.empty:
-            self._calculate_historical_premiums(features, prop_history, postnummer_cohort, by_cohort)
-        else:
-            # Set premium features to 0 for new properties
-            features.update({
-                'historical_premium_vs_postnummer': 0,
-                'historical_premium_vs_by': 0,
-                'historical_premium_vs_postnummer_pct': 0,
-                'historical_premium_vs_by_pct': 0,
-                'historical_premium_vs_postnummer_btype': 0,
-                'historical_premium_vs_postnummer_btype_pct': 0
-            })
-        
-        self._calculate_synthesized_features(features)
-        
-        return features
+        # Extract square meters
+        sqm = None
+        if apartment.get('enh027ArealTilBeboelse'):
+            sqm = float(apartment['enh027ArealTilBeboelse'])
+        elif apartment.get('enh026EnhedensSamledeAreal'):
+            sqm = float(apartment['enh026EnhedensSamledeAreal'])
+
+        # Extract rooms
+        rooms = None
+        if apartment.get('enh031AntalVærelser'):
+            rooms = int(apartment['enh031AntalVærelser'])
+
+        # Extract floor info
+        floor = apartment.get('enh020Etage', 1)
+
+        return {
+            'btype': 'Ejerlejlighed',
+            'm2': sqm,
+            'Vær.': floor,
+            'rooms': rooms,
+            'byggeaar': apartment.get('enh006Opførelsesår')
+        }
+
+    def _extract_building_features(self, building_data: list) -> Dict[str, Any]:
+        """
+        Extracts features from building data using proven field names.
+        """
+        if not building_data:
+            return {}
+
+        building = building_data[0]
+
+        # Extract building type
+        building_type_code = building.get('byg021BygningensAnvendelse')
+        btype = self._map_building_type_code(building_type_code)
+
+        # Extract year
+        year = None
+        if building.get('byg026Opførelsesår'):
+            year = int(building['byg026Opførelsesår'])
+
+        # Extract building area
+        sqm = building.get('byg038SamletBygningsareal')
+        if sqm:
+            sqm = float(sqm)
+
+        # Extract floors
+        floors = building.get('byg054AntalEtager', 1)
+
+        return {
+            'btype': btype,
+            'm2': sqm,
+            'Vær.': floors,
+            'byggeaar': year
+        }
+
+    def _map_building_type_code(self, code: str) -> str:
+        """
+        Maps building use codes to btype categories.
+        """
+        if not code:
+            return 'Villa'
+
+        mapping = {
+            '110': 'Stuehus til landbrugsejendom',
+            '120': 'Villa',
+            '130': 'Villa',
+            '140': 'Ejerlejlighed',
+            '150': 'Ejerlejlighed',
+            '160': 'Villa',
+            '190': 'Villa',
+            '920': 'Villa',
+        }
+
+        return mapping.get(code, 'Villa')
 
     def _calculate_core_features(self, features: Dict, prop_history: pd.DataFrame, address_info: Dict):
         if prop_history.empty:
             print("No sales history found - using BBR data")
             
-            # Get building characteristics from BBR
+            # Get building characteristics from BBR using proven methods
             bbr_data = self._get_bbr_data(address_info)
             
             features['dato'] = pd.Timestamp.now(tz='UTC')
             features.update({
                 'købesum': None,
-                'prev_købesum': None,  # No previous sale
+                'prev_købesum': None,
                 'Vær.': bbr_data.get('Vær.', 1) if bbr_data else 1,
-                'm2': bbr_data.get('m2', 100) if bbr_data else 100,  # Default to 100m2 if unknown
+                'm2': bbr_data.get('m2', 100) if bbr_data else 100,
                 'btype': bbr_data.get('btype', 'Villa') if bbr_data else 'Villa',
-                'days_since_last_sale': None,  # Never sold before
-                'pris_pr_m2_prev': None,       # No previous price
+                'days_since_last_sale': None,
+                'pris_pr_m2_prev': None,
                 'pris_pr_m2_mean_postummer_prev': None,
                 'pris_pr_m2_mean_postnummer_btype_prev': None
             })
@@ -367,10 +343,9 @@ class FeatureGenerator:
                 'pris_pr_m2_mean_postnummer_btype_prev': last_sale.get('pris_pr_m2_mean_365D_postnummer_btype')
             })
 
-            postnummer = address_info.get('postnummer', 0)
-            region_features = self._get_region_from_postnummer(postnummer)
-            features.update(region_features)
-        
+        postnummer = address_info.get('postnummer', 0)
+        region_features = self._get_region_from_postnummer(postnummer)
+        features.update(region_features)
 
     def _get_region_from_postnummer(self, postnr: int) -> Dict[str, int]:
         """
@@ -635,22 +610,149 @@ class FeatureGenerator:
             A dictionary containing the full feature vector, or None if the process fails.
         """
         print(f"\n--- Starting feature generation for: {full_address_query} ---")
+        
+        # Use your proven DAWA lookup
         address_info = self._get_dawa_data(full_address_query)
-        print(address_info)
         if not address_info:
+            print("DAWA lookup failed")
             return None
-    
         print(f"DAWA lookup successful: {address_info}")
 
+        # Use your proven BFE lookup
         bfe_nummer = self._get_bfe_number(address_info)
         if not bfe_nummer:
-            print("could not get bfe number")
-            return None
+            print("Could not get BFE number - property may be new")
+            # Continue anyway - we can still generate features without sales history
+            bfe_nummer = -1  # Use dummy BFE for new properties
+
         print(f"BFE number retrieved: {bfe_nummer}")
 
+        # Generate feature vector
         feature_vector = self._calculate_all_features(address_info, bfe_nummer)
         print("--- Feature generation complete ---")
         return feature_vector
+
+    def _load_and_prepare_data(self, data_path: str) -> pd.DataFrame:
+        """
+        Loads the historical sales data from a CSV file into a pandas DataFrame,
+        performing necessary type conversions and optimizations.
+        """
+        print(f"Loading data from {data_path}...")
+        dtype_map = {
+            'bfe_nummer': 'int64',
+            'postnummer': 'int32',
+            'Vær.': 'int16',
+            'område_Bornholm': 'int8',
+            'område_Fyn og øer': 'int8',
+            '"område_Hovedstaden, København"': 'int8',
+            'område_Nordjylland': 'int8',
+            'område_Nordsjælland': 'int8',
+            'område_Sydjylland': 'int8',
+            'område_Øst- og Midtjylland': 'int8',
+        }
+        df = pd.read_csv(data_path, dtype=dtype_map, low_memory=False)
+        
+        # Debug filter
+        df_filtered = df[
+            (df['postnummer'] == 2960) & 
+            (pd.to_datetime(df['dato']) >= '2024-01-01') & 
+            (pd.to_datetime(df['dato']) <= '2025-08-18')
+        ]
+        print(f"Properties from postnummer 2960 sold between 2024-01-01 and 2025-08-18: {len(df_filtered)}")
+        
+        df['dato'] = pd.to_datetime(df['dato'])
+        df.rename(columns={'\"område_Hovedstaden, København\"': 'område_Hovedstaden_København'}, inplace=True)
+        
+        print("Data loaded and prepared.")
+        return df
+
+    def _build_spatial_index(self) -> BallTree:
+        """
+        Constructs a BallTree spatial index for efficient nearest-neighbor searches.
+        The coordinates are converted to radians as required by the Haversine metric.
+        """
+        print("Building spatial index...")
+        coords_radians = np.radians(self.main_df[['y', 'x']].values)
+        tree = BallTree(coords_radians, metric='haversine')
+        print("Spatial index built successfully.")
+        return tree
+
+    def _calculate_all_features(self, address_info: Dict[str, Any], bfe_nummer: int) -> Dict[str, Any]:
+        """
+        Calculates all features for the property.
+        """
+        features = {}
+
+        # Get property history
+        if bfe_nummer != -1:
+            prop_history = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato').copy()
+        else:
+            prop_history = pd.DataFrame()  # Empty for new properties
+        
+        # Define cohorts
+        postnummer_cohort = self.main_df[self.main_df['postnummer'] == address_info['postnummer']].copy()
+        by_cohort = self.main_df[self.main_df['by'] == address_info['by']].copy()
+
+        # Calculate all feature categories
+        self._calculate_core_features(features, prop_history, address_info)
+        self._calculate_benchmark_features(features, postnummer_cohort, by_cohort)
+        self._calculate_geospatial_features(features, address_info)
+        
+        # Only calculate historical premiums if we have sales history
+        if not prop_history.empty:
+            self._calculate_historical_premiums(features, prop_history, postnummer_cohort, by_cohort)
+        else:
+            # Set premium features to 0 for new properties
+            features.update({
+                'historical_premium_vs_postnummer': 0,
+                'historical_premium_vs_by': 0,
+                'historical_premium_vs_postnummer_pct': 0,
+                'historical_premium_vs_by_pct': 0,
+                'historical_premium_vs_postnummer_btype': 0,
+                'historical_premium_vs_postnummer_btype_pct': 0
+            })
+        
+        self._calculate_synthesized_features(features)
+        
+        return features
+
+    def get_sales_history_for_address(self, full_address_query: str) -> Optional[list]:
+        """
+        Retrieves the formatted sales history for a specific address from the loaded data.
+        """
+        print(f"Looking up sales history for: {full_address_query}")
+
+        # 1. Reuse existing methods to find the property's unique identifier (BFE)
+        address_info = self._get_dawa_data(full_address_query)
+        if not address_info:
+            print("DAWA lookup failed for history.")
+            return None
+
+        bfe_nummer = self._get_bfe_number(address_info)
+        if not bfe_nummer:
+            print("Could not find BFE number for history.")
+            return None
+        
+        print(f"Found BFE: {bfe_nummer}. Querying local sales data.")
+
+        # 2. Filter the main dataframe to get all sales for this property
+        prop_history_df = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato')
+
+        if prop_history_df.empty:
+            print("No sales history found in the dataset for this BFE.")
+            return [] # Return an empty list if the property exists but has no sales
+
+        # 3. Format the data into a clean list of dictionaries for the API response
+        sales_history = []
+        for _, row in prop_history_df.iterrows():
+            sales_history.append({
+                'date': row['dato'].strftime('%Y-%m-%d'), # Format date as a string
+                'price': row['købesum'],
+                'sqm': row['m2'],
+                'price_per_sqm': row['pris_pr_m2']
+            })
+        
+        return sales_history
 
 
 # --- Example Usage ---
