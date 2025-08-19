@@ -15,7 +15,7 @@ const getBuildingInfo = async (req, res) => {
     }, {
       timeout: 30000 // 30 second timeout
     });
-
+    console.log(response.data)
     res.json(response.data);
 
   } catch (error) {

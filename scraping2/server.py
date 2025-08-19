@@ -92,21 +92,34 @@ async def scrape_building_info(req: ScrapeBuildingRequest):
         features = feature_service.generate_for_address(address)
         
         if features:
-            # Extra safety: convert any remaining numpy types
             features = convert_numpy_types(features)
             
-            return {
-                'address': features.get('full_address', address),
-                'sqm': features.get('m2'),
-                'rooms': features.get('Vär.'),  # Note: using Vær. for rooms/floors
-                'year': features.get('byggeaar'),
-                'zip': str(features.get('postnummer', '')),
-                'city': features.get('by'),
-                'buildingType': features.get('btype'),
-                'coordinates': [features.get('y'), features.get('x')] if features.get('y') and features.get('x') else None,
-                'source': 'feature_generator_service',
-                'all_features': features  # This should now be JSON serializable
-            }
+            # Simply rename the fields your frontend expects
+            features['address'] = features.get('full_address', address)
+            features['sqm'] = features.get('m2')
+            features['rooms'] = features.get('Vær.')  # or however rooms are stored
+            features['year'] = features.get('byggeaar')
+            features['zip'] = str(features.get('postnummer', ''))
+            features['city'] = features.get('by')
+            features['buildingType'] = features.get('btype')
+            
+            # Handle coordinates
+            if features.get('y') and features.get('x'):
+                features['coordinates'] = [features.get('y'), features.get('x')]
+            else:
+                features['coordinates'] = None
+
+            building_type = features.get('btype', '')
+            building_types = ['Villa', 'Ejerlejlighed', 'Rækkehus', 'Fritidshus', 'Landejendom']
+            
+            for btype in building_types:
+                features[f'btype_{btype}'] = 1 if building_type == btype else 0
+                
+            features['source'] = 'feature_generator_service'
+            
+            # Return the entire features dict (now with renamed fields)
+            return features
+            
         else:
             print('Feature generation failed, using mock data')
             return generate_mock_building_data(address)

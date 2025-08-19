@@ -692,7 +692,8 @@ class FeatureGenerator:
         # Define cohorts
         postnummer_cohort = self.main_df[self.main_df['postnummer'] == address_info['postnummer']].copy()
         by_cohort = self.main_df[self.main_df['by'] == address_info['by']].copy()
-
+        features['by'] = address_info['by']
+        features['postnummer'] = address_info['postnummer']
         # Calculate all feature categories
         self._calculate_core_features(features, prop_history, address_info)
         self._calculate_benchmark_features(features, postnummer_cohort, by_cohort)

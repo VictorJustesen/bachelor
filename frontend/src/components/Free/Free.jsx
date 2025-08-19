@@ -48,23 +48,19 @@ const handleLocationSelect = (result) => {
 
     setIsFetchingInfo(true);
     try {
-      const [buildingInfo, historyData] = await Promise.all([
-        getBuildingDetails(null, currentData.address),
-        getPropertyHistory(currentData.address, currentData.zip)
-      ]);
+      // Get building info and property history
+      const buildingInfo = await getBuildingDetails(null, currentData.address);
+      
+      console.log('🔍 SCRAPER RETURNED:', Object.keys(buildingInfo).length, 'FEATURES');
 
+      // ✅ IMPORTANT: Keep ALL features from the scraper!
       const updatedData = {
         ...currentData,
-        sqm: buildingInfo.sqm,
-        rooms: buildingInfo.rooms,
-        year: buildingInfo.year,
-        zip: buildingInfo.zip,
-        city: buildingInfo.city,
-        buildingType: buildingInfo.buildingType,
-        salesHistory: historyData.salesHistory || buildingInfo.salesHistory || [],
-        marketTrends: historyData.marketTrends
+        ...buildingInfo,  // 👈 Keep ALL fields from buildingInfo
+        salesHistory: buildingInfo.salesHistory || [],
       };
 
+      console.log('📊 DATA FOR PREDICTION:', Object.keys(updatedData).length, 'FEATURES');
       setSelectedData(updatedData);
 
     } catch (error) {
@@ -75,20 +71,27 @@ const handleLocationSelect = (result) => {
     }
   }
 
-  async function handleEstimatePrice() {
-    if (!selectedData) return;
+async function handleEstimatePrice() {
+  if (!selectedData) return;
 
-    setIsLoading(true);
-    try {
-      const estimate = await estimatePrice(selectedData);
-      setEstimatedPrice(estimate);
-    } catch (error) {
-      console.error('Error estimating price:', error);
-      alert('Fejl ved prisberegning');
-    } finally {
-      setIsLoading(false);
-    }
+  setIsLoading(true);
+  try {
+    console.log('🚀 Sending ALL DATA to prediction service:', selectedData);
+    console.log('📊 Number of keys being sent:', Object.keys(selectedData).length);
+    
+    // ✅ Send ALL the data (includes all scraper features)
+    const estimate = await estimatePrice(selectedData);
+    
+    console.log('💰 Received price estimate:', estimate);
+    setEstimatedPrice(estimate);
+    
+  } catch (error) {
+    console.error('❌ Error estimating price:', error);
+    alert(`Fejl ved prisberegning: ${error.message}`);
+  } finally {
+    setIsLoading(false);
   }
+}
 
   return (
     <div className="free-controls">
