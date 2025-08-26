@@ -3,7 +3,11 @@ FROM node:18-alpine
 
 # set the working directory inside the container
 WORKDIR /app
+# Add this line to declare the build argument
+ARG VITE_MAPBOX_ACCESS_TOKEN
 
+# Add this line to set it as an environment variable for the build
+ENV VITE_MAPBOX_ACCESS_TOKEN=$VITE_MAPBOX_ACCESS_TOKEN
 # copy package.json and install dependencies
 COPY package*.json ./
 RUN npm install

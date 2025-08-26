@@ -44,6 +44,9 @@ jobs:
           context: ./frontend
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+          # Add these two lines to pass the secret to the build
+          build-args: |
+            VITE_MAPBOX_ACCESS_TOKEN=${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
       
