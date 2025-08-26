@@ -6,7 +6,7 @@ from pydantic import BaseModel, create_model
 from typing import Dict, Any, Optional
 import logging
 import numpy as np
-import xgboost as xgb  # ADD THIS IMPORT
+import xgboost as xgb
 
 # --- Configuration ---
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'best_model')
@@ -17,15 +17,68 @@ MODEL_JSON_PATH = os.path.join(MODEL_DIR, f'{MODEL_NAME}_xgboost.json')
 # --- FastAPI App ---
 app = FastAPI(redirect_slashes=False)
 model_package = None
-
-# --- Pydantic Model for Input Validation ---
 DynamicPredictionInput = None
+
+def create_feature_mapping():
+    """
+    Creates a mapping from incoming feature names to model feature names.
+    This handles the naming differences between FeatureGenerator and trained model.
+    """
+    mapping = {}
+    
+    # Direct mappings for most features
+    direct_features = [
+        'index', 'prev_købesum', 'Vær.', 'm2', 'byggeaar', 
+        'pris_pr_m2_mean_365D_postnummer', 'pris_pr_m2_mean_365D_postnummer_btype',
+        'pris_pr_m2_prev', 'pris_pr_m2_mean_postummer_prev', 
+        'pris_pr_m2_mean_postnummer_btype_prev', 'days_since_last_sale',
+        'num_of_5_neighbors', 'mean_of_5_neighbors_pris_pr_m2',
+        'num_of_5_samebtype_neighbors', 'mean_of_5_samebtype_neighbors_pris_pr_m2',
+        'historical_premium_vs_postnummer', 'historical_premium_vs_postnummer_pct',
+        'historical_premium_vs_postnummer_btype', 'historical_premium_vs_postnummer_btype_pct',
+        'mean_of_5_neighbors_pris', 'mean_of_5_samebtype_neighbors_pris',
+        'postnummer_pris_estimate', 'postnummer_pris_premium_adjusted',
+        'postnummer_btype_pris_estimate', 'postnummer_btype_pris_premium_adjusted',
+
+    ]
+    
+    for feature in direct_features:
+        mapping[feature] = feature
+    
+    # Building type mappings: btype -> btype_
+    building_types = ['Ejerlejlighed', 'Villa', 'Rækkehus', 'Fritidshus', 'Landejendom']
+    for btype in building_types:
+        # Map from btype_X to btype_X (if already correct)
+        mapping[f'btype_{btype}'] = f'btype_{btype}'
+        # Also map from btype.X format if it exists
+        mapping[f'btype.{btype}'] = f'btype_{btype}'
+    
+    # Area mappings: område_ -> omr_de_
+    area_mappings = {
+        'område_Bornholm': 'omr_de_Bornholm',
+        'område_Fyn og øer': 'omr_de_Fyn_og__er',
+        'område_Hovedstaden (København)': 'omr_de_Hovedstaden__K_benhavn',
+        'område_Nordjylland': 'omr_de_Nordjylland',
+        'område_Nordsjælland': 'omr_de_Nordsj_lland',
+        'område_Sydjylland': 'omr_de_Sydjylland',
+        'område_Øst- og Midtjylland': 'omr_de__st__og_Midtjylland',
+        'område_Hovedstaden_København' :'omr_de_Hovedstaden__K_benhavn',
+        'btype_Rækkehus' : 'btype_R_kkehus',
+        
+         'prev_købesum': 'prev_k_besum',  # Fix the encoding issue
+        'Vær.': 'V_r_',  # Fix the encoding issue
+        
+    }
+    
+    for incoming, model in area_mappings.items():
+        mapping[incoming] = model
+    
+    return mapping
 
 @app.on_event("startup")
 def load_model():
     """
     Load the model package from disk when the application starts.
-    Handles both PKL metadata and JSON weights for XGBoost.
     """
     global model_package, DynamicPredictionInput
     
@@ -40,17 +93,12 @@ def load_model():
     # Load the XGBoost JSON weights if they exist
     if os.path.exists(MODEL_JSON_PATH):
         print(f"Loading XGBoost weights from: {MODEL_JSON_PATH}")
-        
-        # Create a new XGBoost model and load the weights
         xgb_model = xgb.XGBRegressor()
         xgb_model.load_model(MODEL_JSON_PATH)
-        
-        # Replace the model in the package with the properly loaded one
         model_package['model'] = xgb_model
         print("XGBoost weights loaded successfully.")
     else:
         print(f"Warning: XGBoost JSON weights not found at {MODEL_JSON_PATH}")
-        print("Using model from PKL file (may not have proper weights)")
 
     # Create dynamic input validation
     if model_package and 'feature_columns' in model_package:
@@ -58,11 +106,10 @@ def load_model():
         DynamicPredictionInput = create_model('PredictionInput', **fields)
         print(f"Created input validation for {len(fields)} features")
         
-        # Debug: Show some sample feature names
+        # Debug: Show feature categories
         feature_columns = model_package['feature_columns']
-        print(f"Sample features: {feature_columns[:5]}...")
-        print(f"Building type features: {[f for f in feature_columns if 'btype_' in f]}")
-        print(f"Area features: {[f for f in feature_columns if 'område_' in f]}")
+        print(f"Building type features: {[f for f in feature_columns if f.startswith('btype_')]}")
+        print(f"Area features: {[f for f in feature_columns if f.startswith('omr_de_')]}")
     else:
         raise ValueError("Could not find 'feature_columns' in the loaded model package.")
 
@@ -81,11 +128,9 @@ def get_model_info():
         "model_type": str(type(model_package['model']).__name__),
         "feature_columns": feature_columns,
         "target_column": model_package.get('target_col', 'Unknown'),
-        "model_metadata": model_package.get('model_metadata', {}),
         "num_features": len(feature_columns),
-        "sample_features": feature_columns[:10],  # Show first 10 features
-        "building_types": [f for f in feature_columns if 'btype_' in f],
-        "areas": [f for f in feature_columns if 'område_' in f]
+        "building_types": [f for f in feature_columns if f.startswith('btype_')],
+        "areas": [f for f in feature_columns if f.startswith('omr_de_')]
     }
 
 @app.post("/predict/")
@@ -99,51 +144,109 @@ async def predict(request: Request):
     try:
         # Get the raw JSON data
         raw_data = await request.json()
-        print(f"--- Received prediction request for address: {raw_data.get('address', 'Unknown')} ---")
-        print(f"Raw data keys: {list(raw_data.keys())}")
+        print(f"--- Prediction request for: {raw_data.get('address', 'Unknown')} ---")
 
         model = model_package['model']
         scaler = model_package.get('scaler')
         feature_columns = model_package['feature_columns']
-
-        print(f"\n📋 MODEL EXPECTS THESE FEATURES:")
-        for i, feature in enumerate(feature_columns):  # First 15
-            print(f"   {i+1:2d}. {feature}")
-        if len(feature_columns) > 15:
-            print(f"   ... and {len(feature_columns) - 15} more")
         
-        # Show what data we received
-        print(f"\n📥 RECEIVED DATA KEYS:")
-        received_keys = list(raw_data.keys())
-        for i, key in enumerate(received_keys):  # First 15
-            print(f"   {i+1:2d}. {key} = {raw_data[key]}")
-        if len(received_keys) > 15:
-            print(f"   ... and {len(received_keys) - 15} more")
+        # Create feature mapping
+        feature_mapping = create_feature_mapping()
         
-        # Initialize all features to 0
-        input_data_dict = {feature: 0.0 for feature in feature_columns}
+        # Initialize all features to np.nan
+        input_data_dict = {feature: np.nan for feature in feature_columns}
         
-        # Map incoming data to model features
+        # Track what gets mapped vs what doesn't
         mapped_features = 0
-        for feature in feature_columns:
-            if feature in raw_data and raw_data[feature] is not None:
-                try:
-                    input_data_dict[feature] = float(raw_data[feature])
-                    mapped_features += 1
-                except (ValueError, TypeError):
-                    input_data_dict[feature] = 0.0
+        translation_log = []
+        unmapped_incoming = []
+        mapped_model_features = set()
         
-        print(f"Mapped {mapped_features} features out of {len(feature_columns)} total")
+        for incoming_key, value in raw_data.items():
+            if value is None:
+                continue
+                
+            mapped = False
+            
+            # Check if we have a mapping for this key
+            if incoming_key in feature_mapping:
+                model_key = feature_mapping[incoming_key]
+                if model_key in feature_columns:
+                    try:
+                        input_data_dict[model_key] = float(value)
+                        mapped_features += 1
+                        mapped_model_features.add(model_key)
+                        translation_log.append(f"{incoming_key} -> {model_key} = {value}")
+                        mapped = True
+                    except (ValueError, TypeError):
+                        input_data_dict[model_key] = np.nan
+                        mapped_model_features.add(model_key)
+                        translation_log.append(f"{incoming_key} -> {model_key} = np.nan (conversion error)")
+                        mapped = True
+            # Also try direct mapping if no translation exists
+            elif incoming_key in feature_columns:
+                try:
+                    input_data_dict[incoming_key] = float(value)
+                    mapped_features += 1
+                    mapped_model_features.add(incoming_key)
+                    translation_log.append(f"{incoming_key} = {value} (direct)")
+                    mapped = True
+                except (ValueError, TypeError):
+                    input_data_dict[incoming_key] = np.nan
+                    mapped_model_features.add(incoming_key)
+                    translation_log.append(f"{incoming_key} = np.nan (direct, conversion error)")
+                    mapped = True
+            
+            if not mapped:
+                unmapped_incoming.append(f"{incoming_key} = {value}")
+        
+        # Find model features that weren't set (still at 0.0)
+        unmapped_model_features = [f for f in feature_columns if f not in mapped_model_features]
+        
+        print(f"✅ Mapped {mapped_features} features out of {len(feature_columns)} total")
+        
+        if mapped_features > 0:
+            print(f"\n🔄 Feature mappings (showing first 15):")
+            for log_entry in translation_log[:15]:
+                print(f"   {log_entry}")
+            if len(translation_log) > 15:
+                print(f"   ... and {len(translation_log) - 15} more mappings")
+        
+        if unmapped_incoming:
+            print(f"\n❌ UNMAPPED INCOMING FEATURES ({len(unmapped_incoming)}):")
+            for unmapped in unmapped_incoming:  # Show first 20
+                print(f"   {unmapped}")
+            if len(unmapped_incoming) > 20:
+                print(f"   ... and {len(unmapped_incoming) - 20} more unmapped incoming features")
+        
+        if unmapped_model_features:
+            print(f"\n⚠️  MODEL FEATURES SET TO 0.0 ({len(unmapped_model_features)}):")
+            # Categorize the unmapped model features
+            building_types = [f for f in unmapped_model_features if f.startswith('btype_')]
+            areas = [f for f in unmapped_model_features if f.startswith('omr_de_')]
+            other_features = [f for f in unmapped_model_features if not f.startswith('btype_') and not f.startswith('omr_de_')]
+            
+            if building_types:
+                print(f"   Building types (0/1): {building_types}")
+            if areas:
+                print(f"   Areas (0/1): {areas}")
+            if other_features[:10]:  # Show first 10 other features
+                print(f"   Other features: {other_features[:10]}")
+                if len(other_features) > 10:
+                    print(f"   ... and {len(other_features) - 10} more other features")
         
         # Create DataFrame with correct column order
         input_df = pd.DataFrame([input_data_dict], columns=feature_columns)
-        print(f"\n📋 INPUT DATAFRAME SHAPE: {input_df.shape}")
         
-        # Show a sample of the DataFrame (first 10 columns)
-        print(f"\n📊 SAMPLE OF INPUT DATA (first 10 features):")
-        print("-" * 80)
-        sample_df = input_df
-        print(sample_df.to_string(index=False, float_format='{:.3f}'.format))
+        # Show some non-zero values for verification
+        non_zero_features = {col: val for col, val in input_data_dict.items()}
+        if non_zero_features:
+            print(f"\n✅ NON-ZERO FEATURES ({len(non_zero_features)}):")
+            for feature, value in list(non_zero_features.items()):
+                print(f"   {feature} = {value}")
+            if len(non_zero_features) > 10:
+                print(f"   ... and {len(non_zero_features) - 10} more non-zero features")
+        
         # Apply scaling if available
         if scaler is not None:
             print("Applying scaler transformation...")
@@ -156,11 +259,11 @@ async def predict(request: Request):
 
         # Make prediction
         print("Making prediction...")
-        prediction = model.predict(input_for_prediction[])
+        prediction = model.predict(input_for_prediction)
         predicted_price = float(prediction[0])
         
         # Ensure reasonable bounds
-        predicted_price = max(100000, predicted_price)  # Minimum 100k DKK
+        predicted_price = max(100000, predicted_price)
         
         print(f"✅ Prediction: {predicted_price:,.0f} DKK")
         
@@ -169,7 +272,9 @@ async def predict(request: Request):
             "target_column": model_package.get('target_col', 'købesum'),
             "model_type": str(type(model).__name__),
             "features_used": mapped_features,
-            "total_features": len(feature_columns)
+            "total_features": len(feature_columns),
+            "unmapped_incoming": len(unmapped_incoming),
+            "unmapped_model_features": len(unmapped_model_features)
         }
 
     except Exception as e:

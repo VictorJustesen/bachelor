@@ -31,7 +31,7 @@ def load_feature_generator():
     global feature_service
     
     # Make the data path configurable via an environment variable
-    data_path = os.environ.get("DATA_FILE_PATH", "dataexplor/cleaned_data_with_bfe_coords.csv")
+    data_path = os.environ.get("DATA_FILE_PATH", "dataexplor/cleaned_data_harshertesttest4.csv")
     
     if not os.path.exists(data_path):
         # If the data isn't found, the server can't start.

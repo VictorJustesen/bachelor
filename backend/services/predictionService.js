@@ -11,7 +11,7 @@ const getPrediction = async (req, res) => {
     console.log('\n📥 WHAT WE GET:');
     console.log(`   Total keys: ${Object.keys(requestData).length}`);
     Object.keys(requestData).forEach((key, i) => {
-      if (i < 20) { // Show first 20 keys
+      if (i < 50) { // Show first 20 keys
         console.log(`   ${i+1}. ${key} = ${requestData[key]}`);
       }
     });

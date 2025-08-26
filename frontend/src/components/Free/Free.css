@@ -76,7 +76,6 @@ ul{
 }
 
 .estimated-price {
-  background: rgba(255, 255, 255, 0.1);
   padding: 8px;
   border-radius: 4px;
   margin-top: 8px;
@@ -99,7 +98,6 @@ ul{
 }
 
 .market-trends {
-  background: rgba(255, 255, 255, 0.1);
   padding: 8px;
   border-radius: 4px;
   margin: 8px 0;
@@ -116,13 +114,19 @@ ul{
 
 input[type="number"] {
   -moz-appearance: textfield; /* For Firefox */
+  border-bottom-style: none;
 }
-
+input{
+  border-top-style: none;
+  border-left-style: none;
+  border-bottom-style: none;
+}
 input::-webkit-inner-spin-button,
 input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 
 .close-button {
   position: absolute;

@@ -170,7 +170,6 @@ class FeatureGenerator:
                 'adresseId': address_data.get('id'),
                 'husnummer_id': address_data.get('adgangsadresse', {}).get('id'),
                 'postnummer': int(address_data.get('adgangsadresse', {}).get('postnummer', {}).get('nr', 0)),
-                'by': address_data.get('adgangsadresse', {}).get('postnummer', {}).get('navn', ''),
                 'x': coords[0] if len(coords) >= 2 else None,
                 'y': coords[1] if len(coords) >= 2 else None,
                 'full_address': address_data.get('adressebetegnelse', full_address_query)
@@ -262,7 +261,7 @@ class FeatureGenerator:
             return {}
 
         building = building_data[0]
-
+        print(f"Extracting features from building data: {building}")
         # Extract building type
         building_type_code = building.get('byg021BygningensAnvendelse')
         btype = self._map_building_type_code(building_type_code)
@@ -313,7 +312,11 @@ class FeatureGenerator:
             
             # Get building characteristics from BBR using proven methods
             bbr_data = self._get_bbr_data(address_info)
-            
+
+            dataset_start_date = self.main_df['dato'].min()
+            current_date = pd.Timestamp.now(tz='UTC')
+            features['days_since_dataset_start'] = (current_date - dataset_start_date).days
+                    
             features['dato'] = pd.Timestamp.now(tz='UTC')
             features.update({
                 'købesum': None,
@@ -356,7 +359,7 @@ class FeatureGenerator:
         regions = {
             'område_Bornholm': 0,
             'område_Fyn og øer': 0,
-            'område_Hovedstaden_København': 0,  # Note: using underscore instead of comma
+            'område_Hovedstaden_København': 0,
             'område_Nordjylland': 0,
             'område_Nordsjælland': 0,
             'område_Sydjylland': 0,
@@ -365,7 +368,6 @@ class FeatureGenerator:
         
         # Map postal code to region
         if 0 <= postnr <= 999:
-            # Special case - might not need a region for organizations
             pass
         elif 1000 <= postnr <= 2999:
             regions['område_Hovedstaden_København'] = 1
@@ -374,13 +376,10 @@ class FeatureGenerator:
         elif 3700 <= postnr <= 3799:
             regions['område_Bornholm'] = 1
         elif 3800 <= postnr <= 3899:
-            # Færøerne - not in your model, might default to no region
             pass
         elif 3900 <= postnr <= 3999:
-            # Grønland - not in your model, might default to no region
             pass
         elif 4000 <= postnr <= 4999:
-            # Andre øer - might map to a specific region or none
             pass
         elif 5000 <= postnr <= 5999:
             regions['område_Fyn og øer'] = 1
@@ -395,10 +394,9 @@ class FeatureGenerator:
         
         return regions
 
-    def _calculate_benchmark_features(self, features: Dict, postnummer_cohort: pd.DataFrame, by_cohort: pd.DataFrame):
+    def _calculate_benchmark_features(self, features: Dict, postnummer_cohort: pd.DataFrame):
         if postnummer_cohort.empty:
             features['pris_pr_m2_mean_365D_postnummer'] = np.nan
-            features['pris_pr_m2_mean_365D_by'] = np.nan
             features['pris_pr_m2_mean_365D_postnummer_btype'] = np.nan
             return
 
@@ -407,21 +405,14 @@ class FeatureGenerator:
         one_year_back_from_max = max_data_date - pd.Timedelta(days=365)
         
         postnummer_cohort_recent = postnummer_cohort[postnummer_cohort['dato'] >= one_year_back_from_max]
-        by_cohort_recent = by_cohort[by_cohort['dato'] >= one_year_back_from_max]
 
-        # --- Calculate for Postnummer --- (simple mean like in notebook)
+        # --- Calculate for Postnummer ---
         if not postnummer_cohort_recent.empty:
             features['pris_pr_m2_mean_365D_postnummer'] = postnummer_cohort_recent['pris_pr_m2'].mean()
         else:
             features['pris_pr_m2_mean_365D_postnummer'] = np.nan
 
-        # --- Calculate for By (City) --- (simple mean like in notebook)
-        if not by_cohort_recent.empty:
-            features['pris_pr_m2_mean_365D_by'] = by_cohort_recent['pris_pr_m2'].mean()
-        else:
-            features['pris_pr_m2_mean_365D_by'] = np.nan
-
-        # --- Calculate for Btype-Specific --- (simple mean like in notebook)
+        # --- Calculate for Btype-Specific ---
         btype = features.get('btype')
         if btype and not postnummer_cohort_recent.empty:
             btype_cohort = postnummer_cohort_recent[postnummer_cohort_recent['btype'] == btype]
@@ -432,72 +423,53 @@ class FeatureGenerator:
         else:
             features['pris_pr_m2_mean_365D_postnummer_btype'] = np.nan
 
-        btype = features.get('btype')
-        if btype and not by_cohort_recent.empty:
-            btype_cohort = by_cohort_recent[by_cohort_recent['btype'] == btype]
-            if not btype_cohort.empty:
-                features['pris_pr_m2_mean_365D_by_btype'] = btype_cohort['pris_pr_m2'].mean()
-            else:
-                features['pris_pr_m2_mean_365D_by_btype'] = np.nan
-        else:
-            features['pris_pr_m2_mean_365D_by_btype'] = np.nan
-
-
-
-     
     def _calculate_geospatial_features(self, features: Dict, address_info: Dict):
+        if not all(k in address_info for k in ['y', 'x']) or pd.isna(address_info['y']) or pd.isna(address_info['x']):
+            print("Warning: Missing or invalid coordinates for geospatial feature calculation.")
+            # Set all geospatial features to null/default values
+            features.update({
+                'num_of_5_neighbors': 0,
+                'mean_of_5_neighbors_pris_pr_m2': np.nan,
+                'mean_of_5_neighbors_pris': np.nan,
+                'num_of_5_samebtype_neighbors': 0,
+                'mean_of_5_samebtype_neighbors_pris_pr_m2': np.nan,
+                'mean_of_5_samebtype_neighbors_pris': np.nan
+            })
+            return
+
         target_coords_rad = np.radians([[address_info['y'], address_info['x']]])
         
-        distances, indices = self.spatial_index.query(target_coords_rad, k=31)
+        # Get more neighbors to ensure we can find 5 recent ones after filtering
+        distances, indices = self.spatial_index.query(target_coords_rad, k=500) 
         
-        neighbor_indices = indices[0][1:]  # Exclude the property itself
+        neighbor_indices = indices[0][1:]
         neighbors_df = self.main_df.iloc[neighbor_indices]
 
-        # ADD ALL MISSING NEIGHBOR COUNT FEATURES:
-        features['num_of_5_neighbors'] = min(5, len(neighbors_df))
-        features['num_of_15_neighbors'] = min(15, len(neighbors_df))
-        features['num_of_30_neighbors'] = len(neighbors_df)
+        # Dynamically calculate the cutoff date as one year before the current date
+        cutoff_date = pd.Timestamp.now(tz='UTC') - pd.DateOffset(years=1)
         
-        # Existing price per m2 features
-        features['mean_of_5_neighbors_pris_pr_m2'] = neighbors_df.head(5)['pris_pr_m2'].mean()
-        features['mean_of_15_neighbors_pris_pr_m2'] = neighbors_df.head(15)['pris_pr_m2'].mean()  # ADD THIS
-        features['mean_of_30_neighbors_pris_pr_m2'] = neighbors_df['pris_pr_m2'].mean()
+        neighbors_df_recent = neighbors_df[neighbors_df['dato'] >= cutoff_date]
         
-        # Actual price features
-        neighbors_5 = neighbors_df.head(5)
-        neighbors_15 = neighbors_df.head(15)  # ADD THIS
-        neighbors_30 = neighbors_df
+        # Take up to the 5 most recent neighbors
+        neighbors_5 = neighbors_df_recent.head(5)
         
-        neighbors_5_prices = neighbors_5['pris_pr_m2'] * neighbors_5['m2']
-        neighbors_15_prices = neighbors_15['pris_pr_m2'] * neighbors_15['m2']  # ADD THIS
-        neighbors_30_prices = neighbors_30['pris_pr_m2'] * neighbors_30['m2']
+        features['num_of_5_neighbors'] = len(neighbors_5)
         
-        features['mean_of_5_neighbors_pris'] = neighbors_5_prices.mean()
-        features['mean_of_15_neighbors_pris'] = neighbors_15_prices.mean()  # ADD THIS
-        features['mean_of_30_neighbors_pris'] = neighbors_30_prices.mean()
+        if not neighbors_5.empty:
+            features['mean_of_5_neighbors_pris_pr_m2'] = neighbors_5['pris_pr_m2'].mean()
+            
+            neighbors_5_prices = neighbors_5['pris_pr_m2'] * neighbors_5['m2']
+            features['mean_of_5_neighbors_pris'] = neighbors_5_prices.mean()
+        else:
+            features['mean_of_5_neighbors_pris_pr_m2'] = np.nan
+            features['mean_of_5_neighbors_pris'] = np.nan
         
-        # Same building type neighbor features
-        if 'btype' in features and features['btype']:
+        if 'btype' in features and features.get('btype') and not neighbors_5.empty:
             target_btype = features['btype']
             samebtype_neighbors_5 = neighbors_5[neighbors_5['btype'] == target_btype]
-            samebtype_neighbors_15 = neighbors_15[neighbors_15['btype'] == target_btype]  # ADD THIS
-            samebtype_neighbors_30 = neighbors_30[neighbors_30['btype'] == target_btype]
             
-            # ADD MISSING SAME-TYPE NEIGHBOR COUNTS:
             features['num_of_5_samebtype_neighbors'] = len(samebtype_neighbors_5)
-            features['num_of_15_samebtype_neighbors'] = len(samebtype_neighbors_15)  # ADD THIS
-            features['num_of_30_samebtype_neighbors'] = len(samebtype_neighbors_30)
             
-            # ADD MISSING 15-neighbor same-type features:
-            if not samebtype_neighbors_15.empty:
-                features['mean_of_15_samebtype_neighbors_pris_pr_m2'] = samebtype_neighbors_15['pris_pr_m2'].mean()
-                samebtype_15_prices = samebtype_neighbors_15['pris_pr_m2'] * samebtype_neighbors_15['m2']
-                features['mean_of_15_samebtype_neighbors_pris'] = samebtype_15_prices.mean()
-            else:
-                features['mean_of_15_samebtype_neighbors_pris_pr_m2'] = np.nan
-                features['mean_of_15_samebtype_neighbors_pris'] = np.nan
-            
-            # Existing 5 and 30 neighbor features...
             if not samebtype_neighbors_5.empty:
                 features['mean_of_5_samebtype_neighbors_pris_pr_m2'] = samebtype_neighbors_5['pris_pr_m2'].mean()
                 samebtype_5_prices = samebtype_neighbors_5['pris_pr_m2'] * samebtype_neighbors_5['m2']
@@ -505,27 +477,16 @@ class FeatureGenerator:
             else:
                 features['mean_of_5_samebtype_neighbors_pris_pr_m2'] = np.nan
                 features['mean_of_5_samebtype_neighbors_pris'] = np.nan
-                
-            if not samebtype_neighbors_30.empty:
-                features['mean_of_30_samebtype_neighbors_pris_pr_m2'] = samebtype_neighbors_30['pris_pr_m2'].mean()
-                samebtype_30_prices = samebtype_neighbors_30['pris_pr_m2'] * samebtype_neighbors_30['m2']
-                features['mean_of_30_samebtype_neighbors_pris'] = samebtype_30_prices.mean()
-            else:
-                features['mean_of_30_samebtype_neighbors_pris_pr_m2'] = np.nan
-                features['mean_of_30_samebtype_neighbors_pris'] = np.nan
         else:
-            # Set all same-type features to NaN if no building type
-            for k in [5, 15, 30]:
-                features[f'num_of_{k}_samebtype_neighbors'] = 0
-                features[f'mean_of_{k}_samebtype_neighbors_pris_pr_m2'] = np.nan
-                features[f'mean_of_{k}_samebtype_neighbors_pris'] = np.nan
+            features['num_of_5_samebtype_neighbors'] = 0
+            features['mean_of_5_samebtype_neighbors_pris_pr_m2'] = np.nan
+            features['mean_of_5_samebtype_neighbors_pris'] = np.nan
 
-    def _calculate_historical_premiums(self, features: Dict, prop_history: pd.DataFrame, postnummer_cohort: pd.DataFrame, by_cohort: pd.DataFrame):
+    def _calculate_historical_premiums(self, features: Dict, prop_history: pd.DataFrame, postnummer_cohort: pd.DataFrame):
         post_rolling_mean = postnummer_cohort.sort_values('dato').set_index('dato')['pris_pr_m2'].rolling('365D', min_periods=30).mean()
-        by_rolling_mean = by_cohort.sort_values('dato').set_index('dato')['pris_pr_m2'].rolling('365D', min_periods=30).mean()
 
         premiums_post = []
-        premiums_by = []
+        premiums_post_pct = []
 
         for _, sale in prop_history.iterrows():
             sale_price_m2 = sale['pris_pr_m2']
@@ -534,28 +495,11 @@ class FeatureGenerator:
             benchmark_post = post_rolling_mean.asof(sale_date)
             if pd.notna(benchmark_post) and benchmark_post > 0:
                 premiums_post.append(sale_price_m2 - benchmark_post)
-
-            benchmark_by = by_rolling_mean.asof(sale_date)
-            if pd.notna(benchmark_by) and benchmark_by > 0:
-                premiums_by.append(sale_price_m2 - benchmark_by)
+                premiums_post_pct.append((sale_price_m2 - benchmark_post) / benchmark_post)
 
         features['historical_premium_vs_postnummer'] = np.mean(premiums_post) if premiums_post else 0
-        features['historical_premium_vs_by'] = np.mean(premiums_by) if premiums_by else 0
-        
-        premiums_post_pct = []
-        premiums_by_pct = []
-        for _, sale in prop_history.iterrows():
-            sale_price_m2 = sale['pris_pr_m2']
-            sale_date = sale['dato']
-            benchmark_post = post_rolling_mean.asof(sale_date)
-            if pd.notna(benchmark_post) and benchmark_post > 0:
-                premiums_post_pct.append((sale_price_m2 - benchmark_post) / benchmark_post)
-            benchmark_by = by_rolling_mean.asof(sale_date)
-            if pd.notna(benchmark_by) and benchmark_by > 0:
-                premiums_by_pct.append((sale_price_m2 - benchmark_by) / benchmark_by)
-
         features['historical_premium_vs_postnummer_pct'] = np.mean(premiums_post_pct) * 100 if premiums_post_pct else 0
-        features['historical_premium_vs_by_pct'] = np.mean(premiums_by_pct) * 100 if premiums_by_pct else 0
+        
         btype = features.get('btype')
         if btype and not postnummer_cohort.empty:
             btype_cohort = postnummer_cohort[postnummer_cohort['btype'] == btype]
@@ -586,56 +530,52 @@ class FeatureGenerator:
     def _calculate_synthesized_features(self, features: Dict):
         prop_m2 = features.get('m2', 0)
         if not prop_m2:
-            keys = ['postnummer_pris_estimate', 'by_pris_estimate', 'postnummer_pris_premium_adjusted', 'by_pris_premium_adjusted']
-            for k in keys: features[k] = None
+            features['postnummer_pris_estimate'] = None
+            features['postnummer_pris_premium_adjusted'] = None
+            features['postnummer_btype_pris_estimate'] = None  # Add this
+            features['postnummer_btype_pris_premium_adjusted'] = None  # Add this
+            features['days_since_dataset_start'] = None  # Add this
             return
 
+        # Existing calculations
         features['postnummer_pris_estimate'] = features.get('pris_pr_m2_mean_365D_postnummer', 0) * prop_m2
-        features['by_pris_estimate'] = features.get('pris_pr_m2_mean_365D_by', 0) * prop_m2
 
         adj_post_price_m2 = features.get('pris_pr_m2_mean_365D_postnummer', 0) + features.get('historical_premium_vs_postnummer', 0)
         features['postnummer_pris_premium_adjusted'] = adj_post_price_m2 * prop_m2
 
-        adj_by_price_m2 = features.get('pris_pr_m2_mean_365D_by', 0) + features.get('historical_premium_vs_by', 0)
-        features['by_pris_premium_adjusted'] = adj_by_price_m2 * prop_m2
+        # NEW: Add the missing building type specific calculations
+        features['postnummer_btype_pris_estimate'] = features.get('pris_pr_m2_mean_365D_postnummer_btype', 0) * prop_m2
+        
+        # Calculate building type premium adjusted price
+        adj_btype_price_m2 = features.get('pris_pr_m2_mean_365D_postnummer_btype', 0) + features.get('historical_premium_vs_postnummer_btype', 0)
+        features['postnummer_btype_pris_premium_adjusted'] = adj_btype_price_m2 * prop_m2
 
     def generate_for_address(self, full_address_query: str) -> Optional[Dict[str, Any]]:
         """
         The main public method to generate a complete feature vector for a single address.
-
-        Args:
-            full_address_query (str): The address to look up (e.g., "Rådhuspladsen 1, 1550 København V").
-
-        Returns:
-            A dictionary containing the full feature vector, or None if the process fails.
         """
         print(f"\n--- Starting feature generation for: {full_address_query} ---")
         
-        # Use your proven DAWA lookup
         address_info = self._get_dawa_data(full_address_query)
         if not address_info:
             print("DAWA lookup failed")
             return None
         print(f"DAWA lookup successful: {address_info}")
 
-        # Use your proven BFE lookup
         bfe_nummer = self._get_bfe_number(address_info)
         if not bfe_nummer:
             print("Could not get BFE number - property may be new")
-            # Continue anyway - we can still generate features without sales history
-            bfe_nummer = -1  # Use dummy BFE for new properties
+            bfe_nummer = -1
 
         print(f"BFE number retrieved: {bfe_nummer}")
 
-        # Generate feature vector
         feature_vector = self._calculate_all_features(address_info, bfe_nummer)
         print("--- Feature generation complete ---")
         return feature_vector
 
     def _load_and_prepare_data(self, data_path: str) -> pd.DataFrame:
         """
-        Loads the historical sales data from a CSV file into a pandas DataFrame,
-        performing necessary type conversions and optimizations.
+        Loads the historical sales data from a CSV file into a pandas DataFrame.
         """
         print(f"Loading data from {data_path}...")
         dtype_map = {
@@ -652,14 +592,6 @@ class FeatureGenerator:
         }
         df = pd.read_csv(data_path, dtype=dtype_map, low_memory=False)
         
-        # Debug filter
-        df_filtered = df[
-            (df['postnummer'] == 2960) & 
-            (pd.to_datetime(df['dato']) >= '2024-01-01') & 
-            (pd.to_datetime(df['dato']) <= '2025-08-18')
-        ]
-        print(f"Properties from postnummer 2960 sold between 2024-01-01 and 2025-08-18: {len(df_filtered)}")
-        
         df['dato'] = pd.to_datetime(df['dato'])
         df.rename(columns={'\"område_Hovedstaden, København\"': 'område_Hovedstaden_København'}, inplace=True)
         
@@ -669,7 +601,6 @@ class FeatureGenerator:
     def _build_spatial_index(self) -> BallTree:
         """
         Constructs a BallTree spatial index for efficient nearest-neighbor searches.
-        The coordinates are converted to radians as required by the Haversine metric.
         """
         print("Building spatial index...")
         coords_radians = np.radians(self.main_df[['y', 'x']].values)
@@ -687,28 +618,25 @@ class FeatureGenerator:
         if bfe_nummer != -1:
             prop_history = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato').copy()
         else:
-            prop_history = pd.DataFrame()  # Empty for new properties
+            prop_history = pd.DataFrame()
         
         # Define cohorts
         postnummer_cohort = self.main_df[self.main_df['postnummer'] == address_info['postnummer']].copy()
-        by_cohort = self.main_df[self.main_df['by'] == address_info['by']].copy()
-        features['by'] = address_info['by']
         features['postnummer'] = address_info['postnummer']
+        
         # Calculate all feature categories
         self._calculate_core_features(features, prop_history, address_info)
-        self._calculate_benchmark_features(features, postnummer_cohort, by_cohort)
+        self._calculate_benchmark_features(features, postnummer_cohort)
         self._calculate_geospatial_features(features, address_info)
         
         # Only calculate historical premiums if we have sales history
         if not prop_history.empty:
-            self._calculate_historical_premiums(features, prop_history, postnummer_cohort, by_cohort)
+            self._calculate_historical_premiums(features, prop_history, postnummer_cohort)
         else:
             # Set premium features to 0 for new properties
             features.update({
                 'historical_premium_vs_postnummer': 0,
-                'historical_premium_vs_by': 0,
                 'historical_premium_vs_postnummer_pct': 0,
-                'historical_premium_vs_by_pct': 0,
                 'historical_premium_vs_postnummer_btype': 0,
                 'historical_premium_vs_postnummer_btype_pct': 0
             })
@@ -723,7 +651,6 @@ class FeatureGenerator:
         """
         print(f"Looking up sales history for: {full_address_query}")
 
-        # 1. Reuse existing methods to find the property's unique identifier (BFE)
         address_info = self._get_dawa_data(full_address_query)
         if not address_info:
             print("DAWA lookup failed for history.")
@@ -736,18 +663,16 @@ class FeatureGenerator:
         
         print(f"Found BFE: {bfe_nummer}. Querying local sales data.")
 
-        # 2. Filter the main dataframe to get all sales for this property
         prop_history_df = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato')
 
         if prop_history_df.empty:
             print("No sales history found in the dataset for this BFE.")
-            return [] # Return an empty list if the property exists but has no sales
+            return []
 
-        # 3. Format the data into a clean list of dictionaries for the API response
         sales_history = []
         for _, row in prop_history_df.iterrows():
             sales_history.append({
-                'date': row['dato'].strftime('%Y-%m-%d'), # Format date as a string
+                'date': row['dato'].strftime('%Y-%m-%d'),
                 'price': row['købesum'],
                 'sqm': row['m2'],
                 'price_per_sqm': row['pris_pr_m2']
@@ -758,7 +683,7 @@ class FeatureGenerator:
 
 # --- Example Usage ---
 if __name__ == '__main__':
-    DATA_FILE_PATH = 'dataexplor/cleaned_data_with_bfe_coords.csv'
+    DATA_FILE_PATH = 'dataexplor/cleaned_data_harshtesttest4.csv'
 
     if not os.path.exists(DATA_FILE_PATH):
         print(f"ERROR: Data file not found at '{DATA_FILE_PATH}'.")

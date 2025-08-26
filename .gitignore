@@ -11,3 +11,4 @@ node_modules/
 terraform.tfstate*
 database/database-data/*
 scraping2/dataexplor/*.json
+scraping2/dataexplor/cleaned_data_harshtesttest4.csv
