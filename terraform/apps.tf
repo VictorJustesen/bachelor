@@ -152,16 +152,30 @@ resource "kubernetes_deployment" "frontend" {
   }
 }
 
+resource "kubernetes_config_map" "scraper_data" {
+  provider = kubernetes.aks
+
+  metadata {
+    name      = "scraper-data-configmap"
+    namespace = "bachelor-app"
+  }
+
+  data = {
+    "cleaned_data.csv" = file("${path.module}/../scraping2/dataexplor/cleaned_data_harshertesttest4.csv")
+  }
+}
+
 resource "kubernetes_deployment" "scraper" {
   provider = kubernetes.aks
 
   depends_on = [
-    azurerm_role_assignment.aks_acr_pull
+    azurerm_role_assignment.aks_acr_pull,
+    kubernetes_config_map.scraper_data
   ]
 
   metadata {
     name      = "scraper-deployment"
-    namespace = kubernetes_namespace.app_ns.metadata.0.name
+    namespace = "bachelor-app"
   }
   spec {
     replicas = 1
@@ -182,6 +196,27 @@ resource "kubernetes_deployment" "scraper" {
           image = "${azurerm_container_registry.acr.login_server}/scraper:latest"
           port {
             container_port = 9000
+          }
+
+          # 1. Tell your Python app where the file is
+          env {
+            name  = "DATA_FILE_PATH"
+            value = "/data/cleaned_data.csv"
+          }
+
+          # 2. Mount the ConfigMap as a file
+          volume_mount {
+            name       = "scraper-data-volume"
+            mount_path = "/data"
+            read_only  = true
+          }
+        }
+
+        # 3. Define the volume from the ConfigMap
+        volume {
+          name = "scraper-data-volume"
+          config_map {
+            name = kubernetes_config_map.scraper_data.metadata.0.name
           }
         }
       }
