@@ -17,25 +17,30 @@ const Free = forwardRef(({ map }, ref) => {
   }));
 
   // This function is called from App.jsx when a search result is selected in the Header
-  const handleLocationSelect = (result) => {
-    const [lng, lat] = result.center;
+const handleLocationSelect = (result) => {
+  const [lng, lat] = result.center;
 
-    map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true });
+  map.flyTo({ center: [lng, lat], zoom: 18, pitch: 60, essential: true });
 
-    const selectedDataObj = {
-      address: result.place_name || result.address,
-      salesHistory: []
-    };
-    setSelectedData(selectedDataObj);
-    setVisible(true); // Ensure the overlay is visible when a location is selected
-    setEstimatedPrice(null); // Clear any previous price estimate
+  // 👇 EXTRACT ZIP FROM ADDRESS
+  const address = result.place_name || result.address;
+  const zipMatch = address.match(/\b\d{4}\b/); // Extract 4-digit postal code
+  const extractedZip = zipMatch ? zipMatch[0] : null;
 
-    // Fetch property information after a short delay to allow the map to animate
-    setTimeout(() => {
-      handleFetchInformation(selectedDataObj);
-    }, 500);
+  const selectedDataObj = {
+    address: address,
+    zip: extractedZip,  // 👈 ADD THIS!
+    salesHistory: []
   };
+  
+  setSelectedData(selectedDataObj);
+  setVisible(true);
+  setEstimatedPrice(null);
 
+  setTimeout(() => {
+    handleFetchInformation(selectedDataObj);
+  }, 500);
+};
   async function handleFetchInformation(dataOverride = null) {
     const currentData = dataOverride || selectedData;
 
@@ -43,21 +48,23 @@ const Free = forwardRef(({ map }, ref) => {
 
     setIsFetchingInfo(true);
     try {
-      const [buildingInfo, historyData] = await Promise.all([
-        getBuildingDetails(null, currentData.address),
-        getPropertyHistory(currentData.address, currentData.zip)
-      ]);
+      // Get building info
+      const buildingInfo = await getBuildingDetails(null, currentData.address);
 
+      // Get property history (NEW)
+      let salesHistory = [];
+      try {
+        const historyResponse = await getPropertyHistory(currentData.address, currentData.zip);
+        salesHistory = historyResponse.salesHistory || [];
+      } catch (err) {
+        console.warn('No sales history found:', err);
+      }
+
+      // Merge both results
       const updatedData = {
         ...currentData,
-        sqm: buildingInfo.sqm,
-        rooms: buildingInfo.rooms,
-        year: buildingInfo.year,
-        zip: buildingInfo.zip,
-        city: buildingInfo.city,
-        buildingType: buildingInfo.buildingType,
-        salesHistory: historyData.salesHistory || buildingInfo.salesHistory || [],
-        marketTrends: historyData.marketTrends
+        ...buildingInfo,
+        salesHistory, // Use the history from the endpoint
       };
 
       setSelectedData(updatedData);
@@ -70,20 +77,42 @@ const Free = forwardRef(({ map }, ref) => {
     }
   }
 
-  async function handleEstimatePrice() {
-    if (!selectedData) return;
+async function handleEstimatePrice() {
+  if (!selectedData) return;
 
-    setIsLoading(true);
-    try {
-      const estimate = await estimatePrice(selectedData);
-      setEstimatedPrice(estimate);
-    } catch (error) {
-      console.error('Error estimating price:', error);
-      alert('Fejl ved prisberegning');
-    } finally {
-      setIsLoading(false);
-    }
+  setIsLoading(true);
+  try {
+    // Wait for state to update (if user just changed input)
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const latestData = selectedData; // Now should be up-to-date
+
+    // Map frontend fields to backend expected fields
+    const mappedData = {
+      ...latestData,
+      m2: latestData.sqm,         // Map 'sqm' to 'm2'
+      'Vær.': latestData.rooms,      // Map 'rooms' to 'Vær'
+      postnummer: latestData.zip, // Map 'zip' to 'postnummer'
+      // You can add more mappings here if needed
+    };
+
+    console.log('🚀 Sending ALL DATA to prediction service:', mappedData);
+    const estimate = await estimatePrice(mappedData);
+    setEstimatedPrice(estimate);
+  } catch (error) {
+    console.error('❌ Error estimating price:', error);
+    alert(`Fejl ved prisberegning: ${error.message}`);
+  } finally {
+    setIsLoading(false);
   }
+}
+
+  const buildingTypes = [
+    'Villa',
+    'Ejerlejlighed',
+    'Rækkehus',
+    'Fritidshus',
+    'Landejendom'
+  ];
 
   return (
     <div className="free-controls">
@@ -117,14 +146,7 @@ const Free = forwardRef(({ map }, ref) => {
               onChange={e => setSelectedData({ ...selectedData, zip: e.target.value })}
             />
           </label>
-          <label>
-            By:
-            <input
-              type="text"
-              value={selectedData.city || ''}
-              onChange={e => setSelectedData({ ...selectedData, city: e.target.value })}
-            />
-          </label>
+        
           <label>
             Antal rum:
             <input
@@ -133,30 +155,60 @@ const Free = forwardRef(({ map }, ref) => {
               onChange={e => setSelectedData({ ...selectedData, rooms: +e.target.value })}
             />
           </label>
-          <label>
+          {/*<label>
             Byggeår:
             <input
               type="number"
               value={selectedData.year || ''}
               onChange={e => setSelectedData({ ...selectedData, year: +e.target.value })}
             />
+          </label>*/}
+          <label>
+            Bygningstype:
+            <select className="text"
+              value={selectedData.buildingType || ''}
+              onChange={e => {
+                const val = e.target.value;
+                // Set all one-hot fields to 0, except the selected one
+                const oneHot = {};
+                buildingTypes.forEach(type => {
+                  oneHot[`btype_${type}`] = type === val ? 1 : 0;
+                });
+                setSelectedData({
+                  ...selectedData,
+                  buildingType: val,
+                  btype: val,
+                  ...oneHot
+                });
+              }}
+            >
+              <option className="text" value="">Vælg type</option>
+              {buildingTypes.map(type => (
+                <option key={type} className="text" value={type}>{type}</option>
+              ))}
+            </select>
           </label>
-
-          <h4 className='text'>Salgshistorik</h4>
-          <ul>
-            {selectedData.salesHistory?.map((sale, i) => (
-              <li className='text' key={i}>
-                {sale.date}: DKK {sale.price?.toLocaleString()} {sale.type && `(${sale.type})`}
+          {selectedData.salesHistory && selectedData.salesHistory.length > 0 && (
+            <>
+              <h4 className='text'>Salgshistorik</h4>
+              <ul>
+                {selectedData.salesHistory?.map((sale, i) => (
+                  <li className='text' key={i}>
+                    {sale.date}: DKK {sale.price?.toLocaleString()} {sale.type && `(${sale.type})`}
               </li>
             ))}
           </ul>
 
-          {selectedData.marketTrends && (
+            </>
+          )}
+          {selectedData.mean_of_5_neighbors_pris_pr_m2 && selectedData.pris_pr_m2_mean_365D_postnummer && (
             <div className="market-trends">
-              <h4>Markedsdata</h4>
-              <p>Gennemsnitspris per m²: DKK {selectedData.marketTrends.averagePricePerSqm?.toLocaleString()}</p>
-              <p>Gennemsnitlig salgstid: {selectedData.marketTrends.averageSellTime} dage</p>
-              <p>Prisændring (1 år): {selectedData.marketTrends.priceChange1Year}</p>
+              <h4 style={{ margin: '0' }} className='text'>Markedsdata</h4>
+              <p className="text">Gennemsnitspris pr m² blandt dine naboer: {(Math.round(selectedData.mean_of_5_neighbors_pris_pr_m2) || 0).toLocaleString()} Kr</p>
+              <p className="text">Gennemsnitspris pr m² i kommunen: KR {(Math.round(selectedData.pris_pr_m2_mean_365D_postnummer) || 0).toLocaleString()} Kr </p>
+
+
+
             </div>
           )}
 
@@ -170,13 +222,15 @@ const Free = forwardRef(({ map }, ref) => {
 
           {estimatedPrice && (
             <div className="estimated-price">
-              <h4>Estimeret pris:</h4>
-              <p className="price-value">DKK {estimatedPrice.estimated_price?.toLocaleString()}</p>
+              <h4 className="text">Estimeret pris:</h4>
+              <p className="price-value">DKK {(Math.round(estimatedPrice.estimated_price) || 0).toLocaleString()}</p>
+              {/*
+
               {estimatedPrice.confidence_score && (
                 <p className="confidence">Tillid: {(estimatedPrice.confidence_score * 100).toFixed(1)}%</p>
-              )}
+              )}*/}
               {estimatedPrice.model_version && (
-                <p className="model-info">Model: {estimatedPrice.model_version}</p>
+                <p className="model-info">Model: XGBoost</p>
               )}
             </div>
           )}

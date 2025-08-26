@@ -1,3 +1,5 @@
 *.csv
 
-dataexplor/*.csv
+dataexplor/*
+
+!dataexplor/cleaned_data_harshtesttest4.csv

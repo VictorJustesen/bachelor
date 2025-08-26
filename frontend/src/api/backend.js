@@ -17,6 +17,8 @@ export async function getBuildingDetails(buildingId, address) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ buildingId, address })
         });
+      console.log(`Building Info: ${JSON.stringify(data)}`);
+
         return data;
     } catch (error) {
         console.error('Error fetching building details:', error);
@@ -53,22 +55,12 @@ export async function getPropertyHistory(address, zip) {
     }
 }
 
-export async function estimatePrice(buildingDetails) {
-    try {
-        console.log('Calling backend for price estimation:', buildingDetails);
-        
-        // Change from 'predictor/predict' to 'predict' to go through backend
-        const estimate = await fetchFromBackend('predict', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(buildingDetails)
-        });
-        
-        console.log('Backend response:', estimate);
-        return estimate;
-        
-    } catch (error) {
-        console.error('Error estimating price:', error);
-        throw error;
-    }
-}
+export const estimatePrice = async (propertyData) => {
+    console.log('🚀 Estimating price for property:', propertyData.address);
+    
+    return fetchFromBackend('predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(propertyData)  // Send all the scraper data
+    });
+};
