@@ -151,40 +151,20 @@ resource "kubernetes_deployment" "frontend" {
     }
   }
 }
-# terraform/apps.tf
-
-variable "scraper_data_file" {
-  type        = string
-  description = "The absolute path to the scraper's data file. Should be an empty string if the file is not available."
-  default     = "../scraping2/dataexplor/cleaned_data_harshertesttest4.csv"
-}
-
-resource "kubernetes_config_map" "scraper_data" {
-  # This resource is only created if the scraper_data_file variable is not an empty string.
-  count = var.scraper_data_file != "" ? 1 : 0
-
+resource "kubernetes_secret" "storage_secret" {
   provider = kubernetes.aks
-
   metadata {
-    name      = "scraper-data-configmap"
-    namespace = "bachelor-app"
+    name      = "storage-secret"
+    namespace = kubernetes_namespace.app_ns.metadata[0].name
   }
-
   data = {
-    "cleaned_data.csv" = file(var.scraper_data_file)
+    AZURE_STORAGE_CONNECTION_STRING = azurerm_storage_account.scraperdata.primary_connection_string
   }
 }
 
 resource "kubernetes_deployment" "scraper" {
-  # MODIFIED: This deployment will now only be created when the ConfigMap is also created.
-  count = var.scraper_data_file != "" ? 1 : 0
-
-  provider = kubernetes.aks
-
-  depends_on = [
-    azurerm_role_assignment.aks_acr_pull,
-    kubernetes_config_map.scraper_data
-  ]
+  provider  = kubernetes.aks
+  # depends_on is no longer needed
 
   metadata {
     name      = "scraper-deployment"
@@ -192,41 +172,61 @@ resource "kubernetes_deployment" "scraper" {
   }
   spec {
     replicas = 1
-    selector {
-      match_labels = {
-        app = "scraper"
-      }
-    }
+    selector { match_labels = { app = "scraper" } }
     template {
-      metadata {
-        labels = {
-          app = "scraper"
-        }
-      }
+      metadata { labels = { app = "scraper" } }
       spec {
-        container {
-          name  = "scraper-container"
-          image = "${azurerm_container_registry.acr.login_server}/scraper:latest"
-          port {
-            container_port = 9000
-          }
-          env {
-            name  = "DATA_FILE_PATH"
-            value = "/data/cleaned_data.csv"
-          }
+        # --- NEW: Init Container ---
+        # This container runs to completion before the main container starts.
+        init_containers {
+          name    = "blob-downloader"
+          image   = "mcr.microsoft.com/azure-cli"
+          command = ["/bin/sh", "-c"]
+          args = [
+            "az storage blob download --container-name scraper-data-container --name cleaned_data.csv --file /data/cleaned_data.csv --connection-string $(AZURE_STORAGE_CONNECTION_STRING)"
+          ]
+
+          # Mount the shared volume
           volume_mount {
             name       = "scraper-data-volume"
             mount_path = "/data"
-            read_only  = true
+          }
+
+          # Get the connection string from our new secret
+          env {
+            name = "AZURE_STORAGE_CONNECTION_STRING"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.storage_secret.metadata[0].name
+                key  = "AZURE_STORAGE_CONNECTION_STRING"
+              }
+            }
           }
         }
 
+        # --- Main Application Container ---
+        container {
+          name  = "scraper-container"
+          image = "${azurerm_container_registry.acr.login_server}/scraper:latest"
+          port { container_port = 9000 }
+
+          env {
+            name  = "DATA_FILE_PATH"
+            value = "/data/cleaned_data.csv" # It will find the file here
+          }
+
+          # Mount the shared volume where the file was downloaded
+          volume_mount {
+            name       = "scraper-data-volume"
+            mount_path = "/data"
+          }
+        }
+
+        # --- The Shared Volume ---
+        # This is a temporary directory that both containers can see.
         volume {
           name = "scraper-data-volume"
-          config_map {
-            # The name now correctly references the conditional resource.
-            name = kubernetes_config_map.scraper_data[0].metadata[0].name
-          }
+          empty_dir {}
         }
       }
     }

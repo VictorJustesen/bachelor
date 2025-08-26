@@ -104,33 +104,19 @@ resource "kubernetes_namespace" "app_ns" {
   }
 }
 
-# --- NEW: Create a Storage Account for the scraper data ---
+# --- Create a Storage Account for the scraper data ---
 resource "azurerm_storage_account" "scraperdata" {
-  name                     = "bachelorscraperdata" # A unique name is required
+  name                     = "bachelorscraperdata"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
 }
 
-# --- NEW: Create a Blob Container inside the Storage Account ---
+# --- Create a Blob Container inside the Storage Account ---
 resource "azurerm_storage_container" "scraperdata" {
   name                  = "scraper-data-container"
   storage_account_name  = azurerm_storage_account.scraperdata.name
   container_access_type = "private"
 }
 
-# --- NEW: Upload the CSV file to the Blob Container ---
-# This resource will upload your local file during the 'terraform apply'
-resource "azurerm_storage_blob" "csv_blob" {
-  name                   = "cleaned_data.csv"
-  storage_account_name   = azurerm_storage_account.scraperdata.name
-  storage_container_name = azurerm_storage_container.scraperdata.name
-  type                   = "Block"
-  source                 = "../scraping2/dataexplor/cleaned_data_harshertesttest4.csv" # Path to your local CSV
-}
-
-# Helper to generate a unique name for the storage account
-resource "random_id" "unique" {
-  byte_length = 8
-}
