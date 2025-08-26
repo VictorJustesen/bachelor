@@ -163,8 +163,7 @@ resource "kubernetes_secret" "storage_secret" {
 }
 
 resource "kubernetes_deployment" "scraper" {
-  provider  = kubernetes.aks
-  # depends_on is no longer needed
+  provider = kubernetes.aks
 
   metadata {
     name      = "scraper-deployment"
@@ -172,18 +171,27 @@ resource "kubernetes_deployment" "scraper" {
   }
   spec {
     replicas = 1
-    selector { match_labels = { app = "scraper" } }
+    selector {
+      match_labels = {
+        app = "scraper"
+      }
+    }
     template {
-      metadata { labels = { app = "scraper" } }
+      metadata {
+        labels = {
+          app = "scraper"
+        }
+      }
       spec {
-        # --- NEW: Init Container ---
         # This container runs to completion before the main container starts.
         init_container {
-          name    = "blob-downloader"
-          image   = "mcr.microsoft.com/azure-cli"
-          command = ["/bin/sh", "-c"]
-          args = [
-            "az storage blob download --container-name scraper-data-container --name cleaned_data.csv --file /data/cleaned_data.csv --connection-string $(AZURE_STORAGE_CONNECTION_STRING)"
+          name  = "blob-downloader"
+          image = "mcr.microsoft.com/azure-cli"
+          # The entire command is now a single argument to the shell
+          command = [
+            "/bin/sh",
+            "-c",
+            "az storage blob download --container-name scraper-data-container --name cleaned_data.csv --file /data/cleaned_data.csv --connection-string $AZURE_STORAGE_CONNECTION_STRING"
           ]
 
           # Mount the shared volume
@@ -208,7 +216,9 @@ resource "kubernetes_deployment" "scraper" {
         container {
           name  = "scraper-container"
           image = "${azurerm_container_registry.acr.login_server}/scraper:latest"
-          port { container_port = 9000 }
+          port {
+            container_port = 9000
+          }
 
           env {
             name  = "DATA_FILE_PATH"
