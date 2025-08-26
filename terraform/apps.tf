@@ -152,6 +152,13 @@ resource "kubernetes_deployment" "frontend" {
   }
 }
 
+# Add this to terraform/main.tf
+
+variable "scraper_data_file" {
+  type        = string
+  description = "The absolute path to the scraper's data file, provided by the CI/CD environment."
+}
+
 resource "kubernetes_config_map" "scraper_data" {
   provider = kubernetes.aks
 
@@ -161,7 +168,8 @@ resource "kubernetes_config_map" "scraper_data" {
   }
 
   data = {
-    "cleaned_data.csv" = file("${path.root}/../scraping2/dataexplor/cleaned_data_harshertesttest4.csv")
+    # CHANGE THIS LINE to use the variable
+    "cleaned_data.csv" = file(var.scraper_data_file)
   }
 }
 

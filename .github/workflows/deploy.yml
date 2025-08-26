@@ -92,6 +92,9 @@ jobs:
 
       - name: Terraform Apply
         run: terraform -chdir=./terraform apply -auto-approve
+        env:
+          # ADD THIS LINE: It creates a Terraform variable on the fly
+          TF_VAR_scraper_data_file: "${{ github.workspace }}/scraping2/dataexplor/cleaned_data_harshertesttest4.csv"
 
       # --- Kubernetes Steps ---
       - name: Set Kubernetes context
