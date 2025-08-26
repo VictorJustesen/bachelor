@@ -151,18 +151,16 @@ resource "kubernetes_deployment" "frontend" {
     }
   }
 }
-
-# Add this to terraform/main.tf
+# terraform/apps.tf
 
 variable "scraper_data_file" {
   type        = string
   description = "The absolute path to the scraper's data file. Should be an empty string if the file is not available."
-  # Default for local development
   default     = "../scraping2/dataexplor/cleaned_data_harshertesttest4.csv"
 }
 
 resource "kubernetes_config_map" "scraper_data" {
-  # MODIFIED: This resource will only be created if the scraper_data_file variable is not an empty string.
+  # This resource is only created if the scraper_data_file variable is not an empty string.
   count = var.scraper_data_file != "" ? 1 : 0
 
   provider = kubernetes.aks
@@ -178,9 +176,11 @@ resource "kubernetes_config_map" "scraper_data" {
 }
 
 resource "kubernetes_deployment" "scraper" {
+  # MODIFIED: This deployment will now only be created when the ConfigMap is also created.
+  count = var.scraper_data_file != "" ? 1 : 0
+
   provider = kubernetes.aks
 
-  # MODIFIED: The depends_on now correctly references the conditional resource.
   depends_on = [
     azurerm_role_assignment.aks_acr_pull,
     kubernetes_config_map.scraper_data
@@ -224,8 +224,7 @@ resource "kubernetes_deployment" "scraper" {
         volume {
           name = "scraper-data-volume"
           config_map {
-            # MODIFIED: The name now correctly references the conditional resource.
-            # Because 'count' is used, we must access it as the first element of a list.
+            # The name now correctly references the conditional resource.
             name = kubernetes_config_map.scraper_data[0].metadata[0].name
           }
         }
@@ -233,6 +232,7 @@ resource "kubernetes_deployment" "scraper" {
     }
   }
 }
+
 
 
 resource "kubernetes_deployment" "predictor" {
