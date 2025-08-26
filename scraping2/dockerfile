@@ -14,8 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY . .
 
-# Make sure the data file is included
-RUN ls -la dataexplor/
+
 
 EXPOSE 9000
 
