@@ -168,7 +168,7 @@ resource "kubernetes_config_map" "scraper_data" {
   }
 
   data = {
-    # CHANGE THIS LINE to use the variable
+    # This will now reference the file downloaded in the CI/CD step
     "cleaned_data.csv" = file(var.scraper_data_file)
   }
 }

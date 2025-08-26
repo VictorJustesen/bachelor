@@ -11,8 +11,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Login to Azure
         uses: azure/login@v1
@@ -87,14 +85,20 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Init
-        run: terraform -chdir=./terraform init
+      - name: Download CSV from Azure Blob Storage
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            # Note: You might need to make the storage account name and container name dynamic
+            # if you are destroying/recreating them often. For now, this is fine.
+            az storage blob download --overwrite true --container-name scraper-data-container --name cleaned_data.csv --file ${{ github.workspace }}/cleaned_data.csv --account-name "bachelorscraperdata" --auth-mode login
 
       - name: Terraform Apply
         run: terraform -chdir=./terraform apply -auto-approve
         env:
-          # ADD THIS LINE: It creates a Terraform variable on the fly
-          TF_VAR_scraper_data_file: "${{ github.workspace }}/scraping2/dataexplor/cleaned_data_harshertesttest4.csv"
+          # This tells Terraform where to find the file you just downloaded
+          TF_VAR_scraper_data_file: "${{ github.workspace }}/cleaned_data.csv"
+
 
       # --- Kubernetes Steps ---
       - name: Set Kubernetes context
