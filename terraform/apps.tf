@@ -156,10 +156,15 @@ resource "kubernetes_deployment" "frontend" {
 
 variable "scraper_data_file" {
   type        = string
-  description = "The absolute path to the scraper's data file, provided by the CI/CD environment."
+  description = "The absolute path to the scraper's data file. Should be an empty string if the file is not available."
+  # Default for local development
+  default     = "../scraping2/dataexplor/cleaned_data_harshertesttest4.csv"
 }
 
 resource "kubernetes_config_map" "scraper_data" {
+  # MODIFIED: This resource will only be created if the scraper_data_file variable is not an empty string.
+  count = var.scraper_data_file != "" ? 1 : 0
+
   provider = kubernetes.aks
 
   metadata {
@@ -168,7 +173,6 @@ resource "kubernetes_config_map" "scraper_data" {
   }
 
   data = {
-    # This will now reference the file downloaded in the CI/CD step
     "cleaned_data.csv" = file(var.scraper_data_file)
   }
 }
@@ -176,6 +180,7 @@ resource "kubernetes_config_map" "scraper_data" {
 resource "kubernetes_deployment" "scraper" {
   provider = kubernetes.aks
 
+  # MODIFIED: The depends_on now correctly references the conditional resource.
   depends_on = [
     azurerm_role_assignment.aks_acr_pull,
     kubernetes_config_map.scraper_data
@@ -205,14 +210,10 @@ resource "kubernetes_deployment" "scraper" {
           port {
             container_port = 9000
           }
-
-          # 1. Tell your Python app where the file is
           env {
             name  = "DATA_FILE_PATH"
             value = "/data/cleaned_data.csv"
           }
-
-          # 2. Mount the ConfigMap as a file
           volume_mount {
             name       = "scraper-data-volume"
             mount_path = "/data"
@@ -220,17 +221,19 @@ resource "kubernetes_deployment" "scraper" {
           }
         }
 
-        # 3. Define the volume from the ConfigMap
         volume {
           name = "scraper-data-volume"
           config_map {
-            name = kubernetes_config_map.scraper_data.metadata.0.name
+            # MODIFIED: The name now correctly references the conditional resource.
+            # Because 'count' is used, we must access it as the first element of a list.
+            name = kubernetes_config_map.scraper_data[0].metadata[0].name
           }
         }
       }
     }
   }
 }
+
 
 resource "kubernetes_deployment" "predictor" {
   provider = kubernetes.aks

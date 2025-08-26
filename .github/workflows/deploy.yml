@@ -85,20 +85,32 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Terraform Init
+        run: terraform -chdir=./terraform init
+
+      - name: 'Terraform Apply: Create Base Infrastructure'
+        id: tf-apply-1
+        run: terraform -chdir=./terraform apply -auto-approve -var="scraper_data_file="
+        # By passing an empty variable, we ensure the conditional ConfigMap is skipped.
+
+      - name: Wait for Azure Storage DNS
+        run: |
+          echo "Waiting 30 seconds for Azure Storage DNS to propagate..."
+          sleep 30
+
       - name: Download CSV from Azure Blob Storage
         uses: azure/CLI@v1
         with:
           inlineScript: |
-            # Note: You might need to make the storage account name and container name dynamic
-            # if you are destroying/recreating them often. For now, this is fine.
             az storage blob download --overwrite true --container-name scraper-data-container --name cleaned_data.csv --file ${{ github.workspace }}/cleaned_data.csv --account-name "bachelorscraperdata" --auth-mode login
 
-      - name: Terraform Apply
+      - name: 'Terraform Apply: Create Kubernetes ConfigMap'
+        id: tf-apply-2
         run: terraform -chdir=./terraform apply -auto-approve
         env:
-          # This tells Terraform where to find the file you just downloaded
+          # This time, we provide the path to the downloaded file.
+          # Terraform will see the variable has changed and create the ConfigMap.
           TF_VAR_scraper_data_file: "${{ github.workspace }}/cleaned_data.csv"
-
 
       # --- Kubernetes Steps ---
       - name: Set Kubernetes context
