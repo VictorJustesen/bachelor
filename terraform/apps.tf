@@ -178,7 +178,7 @@ resource "kubernetes_deployment" "scraper" {
       spec {
         # --- NEW: Init Container ---
         # This container runs to completion before the main container starts.
-        init_containers {
+        init_container {
           name    = "blob-downloader"
           image   = "mcr.microsoft.com/azure-cli"
           command = ["/bin/sh", "-c"]
