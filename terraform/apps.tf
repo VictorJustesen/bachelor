@@ -161,7 +161,7 @@ resource "kubernetes_config_map" "scraper_data" {
   }
 
   data = {
-    "cleaned_data.csv" = file("${path.module}/../scraping2/dataexplor/cleaned_data_harshertesttest4.csv")
+    "cleaned_data.csv" = file("${path.root}/../scraping2/dataexplor/cleaned_data_harshertesttest4.csv")
   }
 }
 
