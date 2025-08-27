@@ -10,8 +10,7 @@ class GridSearchTuner(HypertuningInterface):
         super().__init__(estimator, loss_fn, param_grid, cv, n_jobs, verbose)
 
     def fit(self, X, y):
-        """Fit with proper scaling per CV split"""
-        from helper.helper import helper  # Import helper
+        from helper.helper import helper  
         
         param_combinations = list(ParameterGrid(self.param_grid))
         best_score = float('-inf')
@@ -24,7 +23,6 @@ class GridSearchTuner(HypertuningInterface):
             if self.verbose > 1:
                 print(f"  Testing params {i+1}/{len(param_combinations)}: {params}")
 
-            # Cross-validation with proper scaling
             cv_scores = []
             
             for train_idx, val_idx in self.cv.split(X):
@@ -33,11 +31,9 @@ class GridSearchTuner(HypertuningInterface):
                 y_train_cv = y.iloc[train_idx]
                 y_val_cv = y.iloc[val_idx]
 
-                # Scale this specific split using helper
                 data_scaler = helper()
                 X_train_scaled, X_val_scaled = data_scaler.scale(X_train_cv, X_val_cv)
 
-                # Create model with these parameters
                 model = self.estimator.__class__(**{**self.estimator.get_params(), **params})
                 model.fit(X_train_scaled, y_train_cv)
                 predictions = model.predict(X_val_scaled)
@@ -46,7 +42,6 @@ class GridSearchTuner(HypertuningInterface):
 
                 cv_scores.append(score)
 
-            # Average CV score for these parameters
             avg_score = np.mean(cv_scores)
             
             if avg_score > best_score:

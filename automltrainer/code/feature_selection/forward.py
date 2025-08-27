@@ -3,14 +3,12 @@ import numpy as np
 from .feature_selection_interface import FeatureSelectionInterface
 
 class ForwardFeatureSelector(FeatureSelectionInterface):
-    """Forward feature selection - starts with no features and adds them one by one."""
     
     def __init__(self, estimator, loss_fn, cv=None, verbose=0, max_features=None):
         super().__init__(estimator, loss_fn, cv, verbose)
         self.max_features = max_features
     
     def fit(self, X: pd.DataFrame, y: pd.Series) -> 'ForwardFeatureSelector':
-        """Fit using forward feature selection with proper CV scaling."""
         from helper.helper import helper
         
         available_features = list(X.columns)
@@ -80,7 +78,6 @@ class ForwardFeatureSelector(FeatureSelectionInterface):
         return self
     
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Transform dataset using selected features."""
         if self.selected_features_ is None:
             raise ValueError("ForwardFeatureSelector not fitted. Call fit() first.")
         return X[self.selected_features_]

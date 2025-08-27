@@ -9,8 +9,6 @@ class LineSearchTuner(HypertuningInterface):
         self.max_passes = max_passes
 
     def fit(self, X, y):
-        """Fit using line search, optimizing one parameter at a time."""
-        # Start with default or initial model parameters
         best_params = {k: v[0] for k, v in self.param_grid.items()}
         self.best_score_ = float('-inf') if self.loss_fn.higher_is_better else float('inf')
 
@@ -29,7 +27,6 @@ class LineSearchTuner(HypertuningInterface):
                     current_params = best_params.copy()
                     current_params[param_name] = value
 
-                    # Cross-validation with proper scaling
                     cv_scores = []
                     for train_idx, val_idx in self.cv.split(X):
                         X_train_cv, X_val_cv = X.iloc[train_idx], X.iloc[val_idx]
@@ -46,11 +43,9 @@ class LineSearchTuner(HypertuningInterface):
 
                     param_scores[value] = np.mean(cv_scores)
 
-                # Find best value for the current parameter
                 best_value_for_param = min(param_scores, key=param_scores.get) if not self.loss_fn.higher_is_better else max(param_scores, key=param_scores.get)
                 current_best_score = param_scores[best_value_for_param]
 
-                # Check for improvement
                 improvement = (current_best_score < self.best_score_) if not self.loss_fn.higher_is_better else (current_best_score > self.best_score_)
 
                 if improvement:

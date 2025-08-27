@@ -11,7 +11,6 @@ class BackwardFeatureSelector(FeatureSelectionInterface):
         self.scoring = 'neg_mean_squared_error'  # Keep for compatibility
 
     def fit(self, X, y):
-        """Fit using provided CV splitter with proper scaling per split"""
         from helper.helper import helper  # Import helper
         
         available_features = list(X.columns)
@@ -92,11 +91,9 @@ class BackwardFeatureSelector(FeatureSelectionInterface):
         return self
 
     def transform(self, X):
-        """Transform any dataset using selected features"""
         if self.selected_features_ is None:
             raise ValueError("BackwardFeatureSelector not fitted. Call fit() first.")
         return X[self.selected_features_]
 
     def fit_transform(self, X, y):
-        """Fit and transform in one step"""
         return self.fit(X, y).transform(X)

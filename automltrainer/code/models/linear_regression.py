@@ -3,7 +3,6 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from .base_model import BaseModelConfig
 
 class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
-    """Linear Regression model with configuration - combines wrapper and config in one class"""
     
     def __init__(self, model_type='linear', alpha=1.0, l1_ratio=0.5, 
                  fit_intercept=True, random_state=42, loss_fn=None, **kwargs):
@@ -17,7 +16,6 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         self.model = None
     
     def _get_linear_model(self, model_type, alpha, l1_ratio, fit_intercept, random_state):
-        """Get the appropriate linear model based on type"""
         if model_type == 'linear':
             return LinearRegression(fit_intercept=fit_intercept)
         elif model_type == 'ridge':
@@ -30,16 +28,14 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         else:
             return LinearRegression(fit_intercept=fit_intercept)  # Fallback
     
-    # BaseModelConfig methods (configuration interface)
     def get_model(self, loss_fn=None, **kwargs):
-        """Create Linear Regression model with default parameters"""
         default_params = {
             'model_type': 'linear',
             'alpha': 1.0,
             'l1_ratio': 0.5,
             'fit_intercept': True,
             'random_state': 42,
-            'loss_fn': loss_fn  # Pass loss function
+            'loss_fn': loss_fn  
         }
         params = {**default_params, **kwargs}
         return LinearRegressionConfig(**params)
@@ -48,7 +44,6 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         return 'linear_regression'
     
     def get_param_grid(self, grid_type):
-        """Get parameter grid for hyperparameter tuning"""
         grids = {
             'small': {
                 'model_type': ['linear', 'ridge'],
@@ -66,9 +61,7 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         }
         return grids.get(grid_type, grids['small'])
     
-    # Sklearn interface methods (model functionality)
     def fit(self, X, y):
-        """Fit the Linear Regression model"""
         self.model = self._get_linear_model(
             model_type=self.model_type,
             alpha=self.alpha,
@@ -77,18 +70,15 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             random_state=self.random_state
         )
         
-        # Fit the model
         self.model.fit(X, y)
         return self
     
     def predict(self, X):
-        """Make predictions"""
         if self.model is None:
             raise ValueError("Model not fitted. Call fit() first.")
         return self.model.predict(X)
     
     def get_params(self, deep=True):
-        """Get parameters for this estimator"""
         return {
             'model_type': self.model_type,
             'alpha': self.alpha,
@@ -99,29 +89,25 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         }
     
     def set_params(self, **params):
-        """Set the parameters of this estimator"""
         for key, value in params.items():
             setattr(self, key, value)
         return self
     
     def score(self, X, y):
-        """Return the coefficient of determination R^2 of the prediction"""
         if self.model is None:
             raise ValueError("Model not fitted. Call fit() first.")
         return self.model.score(X, y)
     
     def get_feature_importance(self):
-        """Get feature importance (coefficients for linear models)"""
         if self.model is None:
             raise ValueError("Model not fitted. Call fit() first.")
         
         if hasattr(self.model, 'coef_'):
-            return abs(self.model.coef_)  # Return absolute coefficients as importance
+            return abs(self.model.coef_)  
         else:
             return None
     
     def get_model_info(self):
-        """Get information about the fitted model"""
         if self.model is None:
             return {"status": "not_fitted"}
         
@@ -136,7 +122,6 @@ class LinearRegressionConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
             info["n_features"] = len(self.model.coef_)
             info["intercept"] = self.model.intercept_ if hasattr(self.model, 'intercept_') else None
         
-        # Add regularization info
         if self.model_type in ['ridge', 'lasso', 'elastic']:
             info["regularization"] = self.model_type
             info["alpha"] = self.alpha

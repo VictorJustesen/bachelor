@@ -5,18 +5,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from typing import Any, Tuple
 
 class FeatureSelectionInterface(ABC, BaseEstimator, TransformerMixin):
-    """Abstract interface for feature selection methods."""
     
     def __init__(self, estimator, loss_fn, cv=None, verbose=0):
-        """
-        Initialize feature selector.
-        
-        Args:
-            estimator: The model to use for evaluation
-            loss_fn: Loss function to optimize
-            cv: Cross-validation splitter
-            verbose: Verbosity level
-        """
+    
         self.estimator = estimator
         self.loss_fn = loss_fn
         self.cv = cv
@@ -26,42 +17,16 @@ class FeatureSelectionInterface(ABC, BaseEstimator, TransformerMixin):
     
     @abstractmethod
     def fit(self, X: pd.DataFrame, y: pd.Series) -> 'FeatureSelectionInterface':
-        """
-        Fit the feature selector on training data.
-        
-        Args:
-            X: Feature matrix
-            y: Target vector
-            
-        Returns:
-            self: Fitted selector
-        """
+      
         pass
     
     @abstractmethod
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform data using selected features.
-        
-        Args:
-            X: Feature matrix to transform
-            
-        Returns:
-            Transformed feature matrix with selected features only
-        """
+       
         pass
     
     def fit_transform(self, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
-        """
-        Fit selector and transform data in one step.
-        
-        Args:
-            X: Feature matrix
-            y: Target vector
-            
-        Returns:
-            Transformed feature matrix with selected features only
-        """
+      
         return self.fit(X, y).transform(X)
     
     @property
