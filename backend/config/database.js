@@ -1,64 +1,43 @@
 const { Sequelize } = require('sequelize');
 
-// Check for production environment
-const isProduction = process.env.ENVIRONMENT === 'prod' || process.env.NODE_ENV === 'production';
+// This is the key: We check for the environment variable that is ONLY available in your production Kubernetes environment.
+// If it exists, we know we are in production. Otherwise, we assume development.
+const isProduction = !!process.env.POSTGRES_HOST;
 
-// Define SSL options based on the environment
-const sslOptions = isProduction 
-  ? { 
-      ssl: { 
-        require: true,
-        rejectUnauthorized: false // For Azure PostgreSQL certificates
-      } 
-    } 
-  : { ssl: false }; // Disable SSL for development (local)
+// Define the database configuration based on the environment
+const dbConfig = {
+  host: isProduction ? process.env.POSTGRES_HOST : process.env.DB_HOST,
+  port: isProduction ? process.env.POSTGRES_PORT : process.env.DB_PORT || 5432,
+  database: isProduction ? process.env.POSTGRES_DB : process.env.DB_NAME,
+  username: isProduction ? process.env.POSTGRES_USER : process.env.DB_USER,
+  password: isProduction ? process.env.POSTGRES_PASSWORD : process.env.DB_PASSWORD,
+  dialect: 'postgres',
+  logging: isProduction ? false : console.log, // Disable verbose logging in production
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000
+  },
+  dialectOptions: {
+    // Enable SSL for Azure, disable for local development
+    ssl: isProduction ? { 
+      require: true,
+      rejectUnauthorized: false // Required for Azure PostgreSQL
+    } : false
+  }
+};
 
-let dbConfig;
-
-if(process.env.ENVIRONMENT === 'production') { 
-  dbConfig = {
-    host: process.env.POSTGRES_HOST,
-    port: process.env.POSTGRES_PORT || 5432,
-    database: process.env.POSTGRES_DB,
-    username: process.env.POSTGRES_USER,
-    password: process.env.POSTGRES_PASSWORD,
-    dialect: 'postgres',
-    logging: false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
-    },
-    dialectOptions: {
-      ...sslOptions
-    }
-  };
-} else {
-  dbConfig = {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME,
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    dialect: 'postgres',
-    logging: console.log,
-    dialectOptions: {
-      ...sslOptions
-    }
-  };
-}
-
-// Log the configuration for debugging, but avoid logging the password
+// Log the configuration for debugging (without the password)
 console.log('Database config loaded:', {
   host: dbConfig.host,
   database: dbConfig.database,
   username: dbConfig.username,
   ssl: isProduction,
-  environment: process.env.ENVIRONMENT || 'dev'
+  environment: isProduction ? 'production' : 'development'
 });
 
-// Create a single Sequelize instance using the config object
+// Create the single Sequelize instance with the correct configuration
 const sequelize = new Sequelize(
   dbConfig.database,
   dbConfig.username,
