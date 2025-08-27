@@ -14,7 +14,7 @@ describe('UserService', () => {
     it('should create a user and return a token on successful registration', async () => {
       const userData = { username: 'testuser', email: 'test@example.com', password: 'password123' };
       
-      User.findOne.mockResolvedValue(null); 
+      User.findOne.mockResolvedValue(null);
       User.create.mockResolvedValue({ id: 1, ...userData });
       jwt.sign.mockReturnValue('test-jwt-token');
 
@@ -25,9 +25,10 @@ describe('UserService', () => {
     });
 
     it('should throw an error if the user already exists', async () => {
-      User.findOne.mockResolvedValue({ username: 'testuser' }); 
+      User.findOne.mockResolvedValue({ username: 'testuser' });
 
-      await expect(userService.register({})).rejects.toThrow('Username or email already exists');
+      const existingUserData = { username: 'testuser', email: 'test@example.com', password: 'password123' };
+      await expect(userService.register(existingUserData)).rejects.toThrow('Username or email already exists');
     });
   });
 
@@ -36,7 +37,7 @@ describe('UserService', () => {
       const mockUser = { username: 'testuser', password_hash: 'hashedpassword' };
       
       User.findOne.mockResolvedValue(mockUser);
-      bcrypt.compare.mockResolvedValue(true); 
+      bcrypt.compare.mockResolvedValue(true);
       jwt.sign.mockReturnValue('test-jwt-token');
 
       const result = await userService.login('testuser', 'password123');
@@ -45,13 +46,17 @@ describe('UserService', () => {
       expect(result.token).toBe('test-jwt-token');
     });
 
-    it.each([
-      ['user not found', null, false],
-      ['wrong password', { password_hash: 'hashed' }, false],
-    ])('should throw "Invalid credentials" when %s', async (scenario, foundUser, isPasswordCorrect) => {
-      User.findOne.mockResolvedValue(foundUser);
+    it('should throw an error if the user is not found', async () => {
+      User.findOne.mockResolvedValue(null);
+      await expect(userService.login('unknownUser', 'pass')).rejects.toThrow('Invalid credentials');
+    });
 
-      await expect(userService.login('user', 'pass')).rejects.toThrow('Invalid credentials');
+    it('should throw an error for a wrong password', async () => {
+      const mockUser = { username: 'testuser', password_hash: 'hashedpassword' };
+      User.findOne.mockResolvedValue(mockUser);
+      bcrypt.compare.mockResolvedValue(false);
+      
+      await expect(userService.login('testuser', 'wrongpassword')).rejects.toThrow('Invalid credentials');
     });
   });
 });
