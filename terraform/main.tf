@@ -92,7 +92,6 @@ resource "azurerm_kubernetes_cluster" "aks" {
 resource "azurerm_role_assignment" "aks_acr_pull" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
-  # Use the Kubelet's Managed Identity for pulling images
   principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
 }
 
@@ -104,7 +103,6 @@ resource "kubernetes_namespace" "app_ns" {
   }
 }
 
-# --- Create a Storage Account for the scraper data ---
 resource "azurerm_storage_account" "scraperdata" {
   name                     = "bachelorscraperdata"
   resource_group_name      = azurerm_resource_group.rg.name
@@ -113,7 +111,6 @@ resource "azurerm_storage_account" "scraperdata" {
   account_replication_type = "LRS"
 }
 
-# --- Create a Blob Container inside the Storage Account ---
 resource "azurerm_storage_container" "scraperdata" {
   name                  = "scraper-data-container"
   storage_account_name  = azurerm_storage_account.scraperdata.name

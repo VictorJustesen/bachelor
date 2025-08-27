@@ -1,6 +1,5 @@
 # apps.tf
 
-# Backend Deployment
 resource "kubernetes_deployment" "backend" {
   provider = kubernetes.aks
 
@@ -41,7 +40,6 @@ resource "kubernetes_deployment" "backend" {
             name  = "ENVIRONMENT"
             value = "prod"
           }
-          # FIXED: Changed the 'name' to match database.js
           env {
             name = "POSTGRES_HOST"
             value_from {
@@ -51,12 +49,10 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
-          # FIXED: Added POSTGRES_PORT for completeness
           env {
             name  = "POSTGRES_PORT"
             value = "5432"
           }
-          # FIXED: Changed the 'name' to match database.js
           env {
             name  = "POSTGRES_DB"
             value_from {
@@ -66,7 +62,6 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
-          # FIXED: Changed the 'name' to match database.js
           env {
             name  = "POSTGRES_USER"
             value_from {
@@ -76,7 +71,6 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
-          # FIXED: Changed the 'name' to match database.js
           env {
             name  = "POSTGRES_PASSWORD"
             value_from {
@@ -106,14 +100,12 @@ resource "kubernetes_service" "backend_service" {
     }
     port {
       port        = 80
-      target_port = 8000 # Assuming your backend runs on port 8000 inside the container
+      target_port = 8000  
     }
     type = "ClusterIP"
   }
 }
 
-# Frontend, Scraper, Predictor would follow a similar pattern for deployments and services...
-# Here are the deployments:
 
 resource "kubernetes_deployment" "frontend" {
   provider = kubernetes.aks
@@ -183,24 +175,20 @@ resource "kubernetes_deployment" "scraper" {
         }
       }
       spec {
-        # This container runs to completion before the main container starts.
         init_container {
           name  = "blob-downloader"
           image = "mcr.microsoft.com/azure-cli"
-          # The entire command is now a single argument to the shell
           command = [
             "/bin/sh",
             "-c",
             "az storage blob download --container-name scraper-data-container --name cleaned_data.csv --file /data/cleaned_data.csv --connection-string $AZURE_STORAGE_CONNECTION_STRING"
           ]
 
-          # Mount the shared volume
           volume_mount {
             name       = "scraper-data-volume"
             mount_path = "/data"
           }
 
-          # Get the connection string from our new secret
           env {
             name = "AZURE_STORAGE_CONNECTION_STRING"
             value_from {
@@ -212,7 +200,6 @@ resource "kubernetes_deployment" "scraper" {
           }
         }
 
-        # --- Main Application Container ---
         container {
           name  = "scraper-container"
           image = "${azurerm_container_registry.acr.login_server}/scraper:latest"
@@ -222,18 +209,15 @@ resource "kubernetes_deployment" "scraper" {
 
           env {
             name  = "DATA_FILE_PATH"
-            value = "/data/cleaned_data.csv" # It will find the file here
+            value = "/data/cleaned_data.csv" 
           }
 
-          # Mount the shared volume where the file was downloaded
           volume_mount {
             name       = "scraper-data-volume"
             mount_path = "/data"
           }
         }
 
-        # --- The Shared Volume ---
-        # This is a temporary directory that both containers can see.
         volume {
           name = "scraper-data-volume"
           empty_dir {}
@@ -286,7 +270,6 @@ resource "kubernetes_deployment" "predictor" {
   }
 }
 
-# ClusterIP Services for internal communication
 resource "kubernetes_service" "frontend_service" {
   provider = kubernetes.aks
 
@@ -346,7 +329,6 @@ resource "kubernetes_service" "predictor_service" {
 
 
 
-# Use the Helm provider to install the ingress-nginx controller
 resource "helm_release" "ingress_nginx" {
   provider = helm.aks
 
@@ -368,7 +350,6 @@ resource "kubernetes_ingress_v1" "main_ingress" {
     name      = "main-ingress"
     namespace = kubernetes_namespace.app_ns.metadata.0.name
     annotations = {
-      # This annotation is fine for the frontend, but we don't want it for the API
       "kubernetes.io/ingress.class" = "nginx"
     }
   }
@@ -376,7 +357,6 @@ resource "kubernetes_ingress_v1" "main_ingress" {
   spec {
     rule {
       http {
-        # FIX: Path for the API with NO rewrite
         path {
           path      = "/api"
           path_type = "Prefix"
@@ -390,7 +370,6 @@ resource "kubernetes_ingress_v1" "main_ingress" {
           }
         }
 
-        # Path for the frontend, which can have a rewrite if needed
         path {
           path      = "/"
           path_type = "Prefix"

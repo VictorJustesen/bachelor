@@ -45,15 +45,11 @@ def create_feature_mapping():
     for feature in direct_features:
         mapping[feature] = feature
     
-    # Building type mappings: btype -> btype_
     building_types = ['Ejerlejlighed', 'Villa', 'Rækkehus', 'Fritidshus', 'Landejendom']
     for btype in building_types:
-        # Map from btype_X to btype_X (if already correct)
         mapping[f'btype_{btype}'] = f'btype_{btype}'
-        # Also map from btype.X format if it exists
         mapping[f'btype.{btype}'] = f'btype_{btype}'
     
-    # Area mappings: område_ -> omr_de_
     area_mappings = {
         'område_Bornholm': 'omr_de_Bornholm',
         'område_Fyn og øer': 'omr_de_Fyn_og__er',
@@ -65,8 +61,8 @@ def create_feature_mapping():
         'område_Hovedstaden_København' :'omr_de_Hovedstaden__K_benhavn',
         'btype_Rækkehus' : 'btype_R_kkehus',
         
-         'prev_købesum': 'prev_k_besum',  # Fix the encoding issue
-        'Vær.': 'V_r_',  # Fix the encoding issue
+         'prev_købesum': 'prev_k_besum', 
+        'Vær.': 'V_r_',  
         
     }
     
@@ -82,7 +78,6 @@ def load_model():
     """
     global model_package, DynamicPredictionInput
     
-    # Load the PKL file with metadata, scaler, features, etc.
     if not os.path.exists(MODEL_PKL_PATH):
         raise RuntimeError(f"Model PKL file not found at {MODEL_PKL_PATH}")
     
@@ -90,7 +85,6 @@ def load_model():
     model_package = joblib.load(MODEL_PKL_PATH)
     print("Model package loaded successfully.")
 
-    # Load the XGBoost JSON weights if they exist
     if os.path.exists(MODEL_JSON_PATH):
         print(f"Loading XGBoost weights from: {MODEL_JSON_PATH}")
         xgb_model = xgb.XGBRegressor()
@@ -100,13 +94,11 @@ def load_model():
     else:
         print(f"Warning: XGBoost JSON weights not found at {MODEL_JSON_PATH}")
 
-    # Create dynamic input validation
     if model_package and 'feature_columns' in model_package:
         fields = {feature: (Optional[float], 0.0) for feature in model_package['feature_columns']}
         DynamicPredictionInput = create_model('PredictionInput', **fields)
         print(f"Created input validation for {len(fields)} features")
         
-        # Debug: Show feature categories
         feature_columns = model_package['feature_columns']
         print(f"Building type features: {[f for f in feature_columns if f.startswith('btype_')]}")
         print(f"Area features: {[f for f in feature_columns if f.startswith('omr_de_')]}")
@@ -142,7 +134,6 @@ async def predict(request: Request):
         raise HTTPException(status_code=503, detail="Model is not loaded or initialized properly")
 
     try:
-        # Get the raw JSON data
         raw_data = await request.json()
         print(f"--- Prediction request for: {raw_data.get('address', 'Unknown')} ---")
 
@@ -150,13 +141,10 @@ async def predict(request: Request):
         scaler = model_package.get('scaler')
         feature_columns = model_package['feature_columns']
         
-        # Create feature mapping
         feature_mapping = create_feature_mapping()
         
-        # Initialize all features to np.nan
         input_data_dict = {feature: np.nan for feature in feature_columns}
         
-        # Track what gets mapped vs what doesn't
         mapped_features = 0
         translation_log = []
         unmapped_incoming = []
@@ -168,7 +156,6 @@ async def predict(request: Request):
                 
             mapped = False
             
-            # Check if we have a mapping for this key
             if incoming_key in feature_mapping:
                 model_key = feature_mapping[incoming_key]
                 if model_key in feature_columns:
@@ -183,7 +170,6 @@ async def predict(request: Request):
                         mapped_model_features.add(model_key)
                         translation_log.append(f"{incoming_key} -> {model_key} = np.nan (conversion error)")
                         mapped = True
-            # Also try direct mapping if no translation exists
             elif incoming_key in feature_columns:
                 try:
                     input_data_dict[incoming_key] = float(value)
@@ -200,28 +186,26 @@ async def predict(request: Request):
             if not mapped:
                 unmapped_incoming.append(f"{incoming_key} = {value}")
         
-        # Find model features that weren't set (still at 0.0)
         unmapped_model_features = [f for f in feature_columns if f not in mapped_model_features]
         
-        print(f"✅ Mapped {mapped_features} features out of {len(feature_columns)} total")
+        print(f"Mapped {mapped_features} features out of {len(feature_columns)} total")
         
         if mapped_features > 0:
             print(f"\n🔄 Feature mappings (showing first 15):")
             for log_entry in translation_log[:15]:
                 print(f"   {log_entry}")
             if len(translation_log) > 15:
-                print(f"   ... and {len(translation_log) - 15} more mappings")
+                print(f"   and {len(translation_log) - 15} more mappings")
         
         if unmapped_incoming:
-            print(f"\n❌ UNMAPPED INCOMING FEATURES ({len(unmapped_incoming)}):")
+            print(f"\n UNMAPPED INCOMING FEATURES ({len(unmapped_incoming)}):")
             for unmapped in unmapped_incoming:  # Show first 20
                 print(f"   {unmapped}")
             if len(unmapped_incoming) > 20:
-                print(f"   ... and {len(unmapped_incoming) - 20} more unmapped incoming features")
+                print(f"   and {len(unmapped_incoming) - 20} more unmapped incoming features")
         
         if unmapped_model_features:
-            print(f"\n⚠️  MODEL FEATURES SET TO 0.0 ({len(unmapped_model_features)}):")
-            # Categorize the unmapped model features
+            print(f"\n  MODEL FEATURES SET TO 0.0 ({len(unmapped_model_features)}):")
             building_types = [f for f in unmapped_model_features if f.startswith('btype_')]
             areas = [f for f in unmapped_model_features if f.startswith('omr_de_')]
             other_features = [f for f in unmapped_model_features if not f.startswith('btype_') and not f.startswith('omr_de_')]
@@ -235,21 +219,18 @@ async def predict(request: Request):
                 if len(other_features) > 10:
                     print(f"   ... and {len(other_features) - 10} more other features")
         
-        # Create DataFrame with correct column order
         input_df = pd.DataFrame([input_data_dict], columns=feature_columns)
         
-        # Show some non-zero values for verification
         non_zero_features = {col: val for col, val in input_data_dict.items()}
         if non_zero_features:
-            print(f"\n✅ NON-ZERO FEATURES ({len(non_zero_features)}):")
+            print(f"\nNON-ZERO FEATURES ({len(non_zero_features)}):")
             for feature, value in list(non_zero_features.items()):
                 print(f"   {feature} = {value}")
             if len(non_zero_features) > 10:
-                print(f"   ... and {len(non_zero_features) - 10} more non-zero features")
+                print(f"   ... and {len(non_zero_features) - 10} more non zero features")
         
-        # Apply scaling if available
         if scaler is not None:
-            print("Applying scaler transformation...")
+            print("Applying scaler transformation")
             scaled_data = scaler.transform(input_df)
             scaled_data = np.nan_to_num(scaled_data, nan=0.0, posinf=0.0, neginf=0.0)
             input_for_prediction = pd.DataFrame(scaled_data, columns=input_df.columns)
@@ -257,12 +238,10 @@ async def predict(request: Request):
             print("No scaler found, using raw features")
             input_for_prediction = input_df.fillna(0)
 
-        # Make prediction
-        print("Making prediction...")
+        print("Making prediction")
         prediction = model.predict(input_for_prediction)
         predicted_price = float(prediction[0])
         
-        # Ensure reasonable bounds
         predicted_price = max(100000, predicted_price)
         
         print(f"✅ Prediction: {predicted_price:,.0f} DKK")
@@ -278,7 +257,7 @@ async def predict(request: Request):
         }
 
     except Exception as e:
-        print(f"❌ Prediction error: {str(e)}")
+        print(f" Prediction error: {str(e)}")
         logging.error("An error occurred during prediction", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 

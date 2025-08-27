@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize'); // Add this import
+const { Op } = require('sequelize');
 const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -10,18 +10,16 @@ class UserService {
   async register(userData) {
     try {
       const { username, email, password, first_name, last_name } = userData;
-      console.log('Registering user with data:', { username, email,password, first_name, last_name }); // Debug log
-      // Add validation
+      console.log('Registering user with data:', { username, email,password, first_name, last_name }); 
       if (!username || !email || !password) {
         throw new Error('Username, email, and password are required');
       }
       
-      console.log('Registering user with data:', { username, email, first_name, last_name }); // Debug log
+      console.log('Registering user with data:', { username, email, first_name, last_name });
       
-      // Check if user already exists - Fix the syntax
       const existingUser = await User.findOne({
         where: {
-          [Op.or]: [{ username }, { email }]  // Use Op.or instead of $or
+          [Op.or]: [{ username }, { email }]  
         }
       });
       
@@ -29,11 +27,9 @@ class UserService {
         throw new Error('Username or email already exists');
       }
       
-      // Hash password
       const saltRounds = 10;
       const password_hash = await bcrypt.hash(password, saltRounds);
       
-      // Create user
       const user = await User.create({
         username,
         email,
@@ -43,7 +39,6 @@ class UserService {
         is_active: true
       });
       
-      // Generate JWT token
       const token = jwt.sign(
         { userId: user.id, username: user.username },
         JWT_SECRET,
@@ -68,14 +63,12 @@ class UserService {
 
   async login(username, password) {
     try {
-      // Add validation
       if (!username || !password) {
         throw new Error('Username and password are required');
       }
       
-      console.log('Login attempt for username:', username); // Debug log
+      console.log('Login attempt for username:', username);
       
-      // Find user
       const user = await User.findOne({
         where: { username, is_active: true }
       });
@@ -84,14 +77,12 @@ class UserService {
         throw new Error('Invalid credentials');
       }
       
-      // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
       
       if (!isValidPassword) {
         throw new Error('Invalid credentials');
       }
       
-      // Generate JWT token
       const token = jwt.sign(
         { userId: user.id, username: user.username },
         JWT_SECRET,
