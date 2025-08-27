@@ -3,7 +3,6 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from .base_model import BaseModelConfig
 
 class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
-    """XGBoost model with configuration - combines wrapper and config in one class"""
     
     def __init__(self, n_estimators=100, learning_rate=0.1, max_depth=6, 
                  subsample=1.0, colsample_bytree=1.0, random_state=42, 
@@ -20,14 +19,12 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
     
     def get_xgb_objective(self, loss_fn):
         if loss_fn is None:
-            return 'reg:squarederror'  
+            return 'reg:absoluteerror' 
         loss_name = loss_fn.name.lower()
-        if loss_name == 'mae':
-            return 'reg:absoluteerror'
-        elif loss_name == 'rmse':
+        if loss_name == 'rmse':
             return 'reg:squarederror'
         else:
-            return 'reg:squarederror' 
+            return 'reg:absoluteerror'
     
     def get_model(self, loss_fn=None, **kwargs):
         default_params = {
@@ -64,10 +61,7 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         }
         return grids.get(grid_type, grids['small'])
     
-    # Sklearn interface methods (model functionality)
     def fit(self, X, y):
-        """Fit the XGBoost model"""
-        # Map custom loss to XGBoost objective
         objective = self.get_xgb_objective(self.loss_fn)
         
         self.model = xgb.XGBRegressor(
@@ -99,7 +93,6 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         }
     
     def set_params(self, **params):
-        """Set the parameters of this estimator"""
         for param, value in params.items():
             if param in ['n_estimators', 'learning_rate', 'max_depth', 
                         'subsample', 'colsample_bytree', 'random_state', 'loss_fn']:
@@ -109,7 +102,6 @@ class XGBoostConfig(BaseModelConfig, BaseEstimator, RegressorMixin):
         return self
     
     def save_model(self, filepath):
-        """Save XGBoost model weights to JSON format"""
         if hasattr(self, 'model') and self.model is not None:
             weights_path = f"{filepath}_xgboost.json"
             self.model.save_model(weights_path)

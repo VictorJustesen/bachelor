@@ -11,8 +11,7 @@ class mape(Loss):
 
     @property
     def higher_is_better(self) -> bool:
-        return False  # Lower MAPE is better
+        return False 
 
     def __call__(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        # Add a small epsilon to avoid division by zero
         return mean_absolute_percentage_error(y_true, y_pred)

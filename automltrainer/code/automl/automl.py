@@ -198,7 +198,6 @@ class SimpleAutoML:
         X = X.rename(columns=sanitized_cols)
         self.sanitized_feature_names = X.columns.tolist()
         self.feature_columns = self.sanitized_feature_names  # Store for saving
-        # --- End of new code ---
         
         # Simple time series split for final train/test
         split_point = int(len(df) * (1 - test_split))
@@ -224,8 +223,8 @@ class SimpleAutoML:
         # Calculate metrics using consistent naming
         y_train_pred = model.predict(X_train_scaled)
         metrics = {
-            'train_loss': loss_fn(y_train, y_train_pred),  # Simplified naming
-            'test_loss': loss_fn(y_test, y_pred)           # Simplified naming
+            'train_loss': loss_fn(y_train, y_train_pred), 
+            'test_loss': loss_fn(y_test, y_pred)          
         }
 
         result = {
@@ -241,7 +240,6 @@ class SimpleAutoML:
         return result
 
 
-    # Add this method to automl.py:
     def _get_best_model(self, model_results, loss_fn):
         valid_results = {name: result for name, result in model_results.items() 
                         if 'error' not in result and 'metrics' in result}
@@ -249,10 +247,8 @@ class SimpleAutoML:
         if not valid_results:
             raise ValueError("No valid models found")
         
-        # Use consistent metric key
         metric_key = 'test_loss'
         
-        # Find model with lowest test error (since lower is better for mae/rmse)
         best_name = min(valid_results.keys(), 
                        key=lambda x: valid_results[x]['metrics'].get(metric_key, float('inf')))
 

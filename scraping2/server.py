@@ -4,43 +4,31 @@ import random
 import re
 import json
 import numpy as np
-import pandas as pd  # ADD THIS LINE
-
+import pandas as pd
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-# --- NEW: Import the FeatureGenerator class ---
 from FeatureGenerator import FeatureGenerator
 
 app = FastAPI()
 
-# --- NEW: A global variable to hold the feature service instance ---
-# We will initialize this at startup to avoid reloading the data on every request.
 feature_service: FeatureGenerator = None
 
-# --- NEW: Use FastAPI's startup event to load the model ---
 @app.on_event("startup")
 def load_feature_generator():
-    """
-    This function runs when the server starts. It loads the data and 
-    initializes the FeatureGenerator, making it ready to handle requests.
-    """
     global feature_service
     
-    # Make the data path configurable via an environment variable
     data_path = os.environ.get("DATA_FILE_PATH", "dataexplor/cleaned_data_harshertesttest4.csv")
     
     if not os.path.exists(data_path):
-        # If the data isn't found, the server can't start.
         raise FileNotFoundError(f"CRITICAL: Data file not found at '{data_path}'. The server cannot start.")
         
     print("Initializing FeatureGenerator for the service...")
     feature_service = FeatureGenerator(data_path=data_path)
-    # The "Initialization complete. Service is ready." message will print here.
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +42,10 @@ PORT = int(os.environ.get('PORT', 9000))
 
 class ScrapeBuildingRequest(BaseModel):
     address: str
+    sqm: Optional[float] = None
+    rooms: Optional[int] = None
+    zip: Optional[str] = None
+    buildingType: Optional[str] = None
 
 class ScrapeHistoryRequest(BaseModel):
     address: str
@@ -61,7 +53,6 @@ class ScrapeHistoryRequest(BaseModel):
 
 
 def convert_numpy_types(obj):
-    """Convert numpy types to native Python types for JSON serialization."""
     if isinstance(obj, dict):
         return {key: convert_numpy_types(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -77,8 +68,6 @@ def convert_numpy_types(obj):
     else:
         return obj
 
-
-# --- MODIFIED: The endpoint now uses the feature generator ---
 @app.post('/scrape/building-info')
 async def scrape_building_info(req: ScrapeBuildingRequest):
     address = req.address
@@ -89,21 +78,28 @@ async def scrape_building_info(req: ScrapeBuildingRequest):
         return generate_mock_building_data(address)
     
     try:
-        features = feature_service.generate_for_address(address)
+        overrides = {
+            "m2": req.sqm,
+            "Vær.": req.rooms,
+            "postnummer": req.zip,
+            "btype": req.buildingType
+        }
+        
+        cleaned_overrides = {k: v for k, v in overrides.items() if v is not None}
+
+        features = feature_service.generate_for_address(address, overrides=cleaned_overrides)
         
         if features:
             features = convert_numpy_types(features)
             
-            # Simply rename the fields your frontend expects
             features['address'] = features.get('full_address', address)
             features['sqm'] = features.get('m2')
-            features['rooms'] = features.get('Vær.')  # or however rooms are stored
+            features['rooms'] = features.get('Vær.')
             features['year'] = features.get('byggeaar')
             features['zip'] = str(features.get('postnummer', ''))
             features['city'] = features.get('by')
             features['buildingType'] = features.get('btype')
             
-            # Handle coordinates
             if features.get('y') and features.get('x'):
                 features['coordinates'] = [features.get('y'), features.get('x')]
             else:
@@ -117,7 +113,6 @@ async def scrape_building_info(req: ScrapeBuildingRequest):
                 
             features['source'] = 'feature_generator_service'
             
-            # Return the entire features dict (now with renamed fields)
             return features
             
         else:
@@ -128,8 +123,6 @@ async def scrape_building_info(req: ScrapeBuildingRequest):
         print(f'Feature generation error: {error}')
         return generate_mock_building_data(address)
 
-
-# This endpoint is unchanged, but you could also integrate it if needed
 @app.post('/scrape/property-history')
 async def scrape_property_history(req: ScrapeHistoryRequest):
     address = req.address
@@ -137,28 +130,22 @@ async def scrape_property_history(req: ScrapeHistoryRequest):
     print(f'Getting property history for: {address}')
 
     try:
-        # Use the new method from our initialized feature_service
         history = feature_service.get_sales_history_for_address(address)
         
-        # The method returns a list if successful (even an empty one for no sales) 
-        # or None if the address lookup itself failed.
         if history is not None:
             return {
                 'address': address,
                 'zip': zip_code,
-                'salesHistory': history, # This will be the list from our new method
+                'salesHistory': history,
                 'source': 'feature_generator_dataset'
             }
         else:
-            # If history is None, it means the address could not be found by DAWA.
             raise HTTPException(status_code=404, detail="Address not found or could not be identified.")
 
     except Exception as error:
         print(f'Property history lookup failed: {error}')
-        # This will catch any unexpected errors during the process
         raise HTTPException(status_code=500, detail='Failed to get property history')
 
-# Mock data function is unchanged
 def generate_mock_building_data(address):
     return {
         'address': address,
@@ -174,6 +161,5 @@ def generate_mock_building_data(address):
     }
 
 if __name__ == '__main__':
-    # You still run the server the same way
     print(f'Scraping and feature server running on port {PORT}')
     uvicorn.run(app, host='0.0.0.0', port=PORT)

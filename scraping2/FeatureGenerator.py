@@ -6,21 +6,17 @@ import requests
 from sklearn.neighbors import BallTree
 from typing import Dict, Any, Optional
 
-# --- Configuration ---
 DATA_FORDELER_USERNAME = os.environ.get("DATAFORDELER_USERNAME", "XEVPPQIYSU")
 DATA_FORDELER_PASSWORD = os.environ.get("DATAFORDELER_PASSWORD", "Luffygear3!")
 
 class FeatureGenerator:
     def __init__(self, data_path: str):
         print("Initializing FeatureGenerator...")
-        self.main_df = self._load_and_prepare_data(data_path)
-        self.spatial_index = self._build_spatial_index()
+        self.main_df = self.load_and_prepare_data(data_path)
+        self.spatial_index = self.build_spatial_index()
         print("Initialization complete. Service is ready.")
 
-    def _get_dawa_address_data(self, address_query: str) -> Optional[list]:
-        """
-        Gets address data from DAWA API - rewritten from property_scraper.
-        """
+    def get_dawa_address_data(self, address_query: str) -> Optional[list]:
         try:
             dawa_url = "https://api.dataforsyningen.dk/adresser"
             params = {
@@ -40,10 +36,7 @@ class FeatureGenerator:
             print(f"Error calling DAWA API: {e}")
             return None
 
-    def _get_apartment_data(self, apartment_id: str) -> Optional[list]:
-        """
-        Gets apartment data from BBR - rewritten from property_scraper.
-        """
+    def get_apartment_data(self, apartment_id: str) -> Optional[list]:
         enhed_endpoint = "https://services.datafordeler.dk/BBR/BBRPublic/1/rest/enhed"
         params = {
             "AdresseIdentificerer": apartment_id,
@@ -59,10 +52,7 @@ class FeatureGenerator:
             print(f"Error getting apartment data: {e}")
         return []
 
-    def _get_building_data(self, adgangsadresse_id: str) -> Optional[list]:
-        """
-        Gets building data from BBR - rewritten from property_scraper.
-        """
+    def get_building_data(self, adgangsadresse_id: str) -> Optional[list]:
         bygning_endpoint = "https://services.datafordeler.dk/BBR/BBRPublic/1/rest/bygning"
         params = {
             "Husnummer": adgangsadresse_id,
@@ -78,10 +68,7 @@ class FeatureGenerator:
             print(f"Error getting building data: {e}")
         return []
 
-    def _get_bfe_from_address(self, address_id: str) -> Optional[int]:
-        """
-        Gets BFE number from address ID - rewritten from property_scraper.
-        """
+    def get_bfe_from_address(self, address_id: str) -> Optional[int]:
         unit_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/adresseTilEnhedBfe"
         params = {
             "adresseId": address_id,
@@ -94,7 +81,6 @@ class FeatureGenerator:
             if resp.status_code == 200:
                 data = resp.json()
                 
-                # Handle different response formats
                 if isinstance(data, list) and data:
                     first_item = data[0]
                     if isinstance(first_item, dict):
@@ -110,10 +96,7 @@ class FeatureGenerator:
             print(f"Error getting BFE from address: {e}")
         return None
 
-    def _get_bfe_from_building(self, husnummer_id: str) -> Optional[int]:
-        """
-        Gets BFE number from building - rewritten from property_scraper.
-        """
+    def get_bfe_from_building(self, husnummer_id: str) -> Optional[int]:
         building_url = "https://services.datafordeler.dk/DAR/DAR_BFE_Public/1/rest/husnummerTilBygningBfe"
         params = {
             "husnummerid": husnummer_id,
@@ -149,21 +132,16 @@ class FeatureGenerator:
             print(f"Error getting BFE from building: {e}")
         return None
 
-    def _get_dawa_data(self, full_address_query: str) -> Optional[Dict[str, Any]]:
-        """
-        Uses DAWA lookup to get address information.
-        """
+    def get_dawa_data(self, full_address_query: str) -> Optional[Dict[str, Any]]:
         try:
-            dawa_results = self._get_dawa_address_data(full_address_query)
+            dawa_results = self.get_dawa_address_data(full_address_query)
             
             if not dawa_results:
                 print(f"No DAWA results for: {full_address_query}")
                 return None
             
-            # Take the first (best) result
             address_data = dawa_results[0]
             
-            # Extract coordinates from your format
             coords = address_data.get('adgangsadresse', {}).get('adgangspunkt', {}).get('koordinater', [])
             
             return {
@@ -179,20 +157,15 @@ class FeatureGenerator:
             print(f"Error in DAWA lookup: {e}")
             return None
 
-    def _get_bfe_number(self, address_info: Dict[str, Any]) -> Optional[int]:
-        """
-        Gets BFE number using both address and building methods.
-        """
+    def get_bfe_number(self, address_info: Dict[str, Any]) -> Optional[int]:
         try:
-            # Try address-based lookup first (for apartments)
             if address_info.get('adresseId'):
-                bfe_result = self._get_bfe_from_address(address_info['adresseId'])
+                bfe_result = self.get_bfe_from_address(address_info['adresseId'])
                 if bfe_result:
                     return bfe_result
 
-            # Fallback to building-based lookup (for houses)
             if address_info.get('husnummer_id'):
-                bfe_result = self._get_bfe_from_building(address_info['husnummer_id'])
+                bfe_result = self.get_bfe_from_building(address_info['husnummer_id'])
                 if bfe_result:
                     return bfe_result
 
@@ -203,46 +176,35 @@ class FeatureGenerator:
             print(f"Error getting BFE number: {e}")
             return None
 
-    def _get_bbr_data(self, address_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Gets BBR data using both apartment and building methods.
-        """
-        # Try apartment data first
+    def get_bbr_data(self, address_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if address_info.get('adresseId'):
-            apartment_data = self._get_apartment_data(address_info['adresseId'])
+            apartment_data = self.get_apartment_data(address_info['adresseId'])
             if apartment_data:
-                return self._extract_apartment_features(apartment_data)
+                return self.extract_apartment_features(apartment_data)
 
-        # Fallback to building data
         if address_info.get('husnummer_id'):
-            building_data = self._get_building_data(address_info['husnummer_id'])
+            building_data = self.get_building_data(address_info['husnummer_id'])
             if building_data:
-                return self._extract_building_features(building_data)
+                return self.extract_building_features(building_data)
 
         return None
 
-    def _extract_apartment_features(self, apartment_data: list) -> Dict[str, Any]:
-        """
-        Extracts features from apartment data using proven field names.
-        """
+    def extract_apartment_features(self, apartment_data: list) -> Dict[str, Any]:
         if not apartment_data:
             return {}
 
         apartment = apartment_data[0]
         
-        # Extract square meters
         sqm = None
         if apartment.get('enh027ArealTilBeboelse'):
             sqm = float(apartment['enh027ArealTilBeboelse'])
         elif apartment.get('enh026EnhedensSamledeAreal'):
             sqm = float(apartment['enh026EnhedensSamledeAreal'])
 
-        # Extract rooms
         rooms = None
         if apartment.get('enh031AntalVærelser'):
             rooms = int(apartment['enh031AntalVærelser'])
 
-        # Extract floor info
         floor = apartment.get('enh020Etage', 1)
 
         return {
@@ -253,30 +215,23 @@ class FeatureGenerator:
             'byggeaar': apartment.get('enh006Opførelsesår')
         }
 
-    def _extract_building_features(self, building_data: list) -> Dict[str, Any]:
-        """
-        Extracts features from building data using proven field names.
-        """
+    def extract_building_features(self, building_data: list) -> Dict[str, Any]:
         if not building_data:
             return {}
 
         building = building_data[0]
         print(f"Extracting features from building data: {building}")
-        # Extract building type
         building_type_code = building.get('byg021BygningensAnvendelse')
-        btype = self._map_building_type_code(building_type_code)
+        btype = self.map_building_type_code(building_type_code)
 
-        # Extract year
         year = None
         if building.get('byg026Opførelsesår'):
             year = int(building['byg026Opførelsesår'])
 
-        # Extract building area
         sqm = building.get('byg038SamletBygningsareal')
         if sqm:
             sqm = float(sqm)
 
-        # Extract floors
         floors = building.get('byg054AntalEtager', 1)
 
         return {
@@ -286,10 +241,7 @@ class FeatureGenerator:
             'byggeaar': year
         }
 
-    def _map_building_type_code(self, code: str) -> str:
-        """
-        Maps building use codes to btype categories.
-        """
+    def map_building_type_code(self, code: str) -> str:
         if not code:
             return 'Villa'
 
@@ -306,56 +258,61 @@ class FeatureGenerator:
 
         return mapping.get(code, 'Villa')
 
-    def _calculate_core_features(self, features: Dict, prop_history: pd.DataFrame, address_info: Dict):
+    def calculate_core_features(self, features: Dict, prop_history: pd.DataFrame, address_info: Dict, overrides: Dict[str, Any]):
         if prop_history.empty:
-            print("No sales history found - using BBR data")
+            print("No sales history found - using BBR data and overrides")
             
-            # Get building characteristics from BBR using proven methods
-            bbr_data = self._get_bbr_data(address_info)
+            bbr_data = self.get_bbr_data(address_info)
 
             dataset_start_date = self.main_df['dato'].min()
             current_date = pd.Timestamp.now(tz='UTC')
             features['days_since_dataset_start'] = (current_date - dataset_start_date).days
                     
             features['dato'] = pd.Timestamp.now(tz='UTC')
-            features.update({
+            
+            default_features = {
                 'købesum': None,
                 'prev_købesum': None,
                 'Vær.': bbr_data.get('Vær.', 1) if bbr_data else 1,
                 'm2': bbr_data.get('m2', 100) if bbr_data else 100,
                 'btype': bbr_data.get('btype', 'Villa') if bbr_data else 'Villa',
+                'byggeaar': bbr_data.get('byggeaar') if bbr_data else None,
                 'days_since_last_sale': None,
                 'pris_pr_m2_prev': None,
                 'pris_pr_m2_mean_postummer_prev': None,
                 'pris_pr_m2_mean_postnummer_btype_prev': None
-            })
-            
+            }
+            features.update(default_features)
+
         else:
-            print("Using sales history")
+            print("Using sales history and overrides")
             last_sale = prop_history.iloc[-1]
             features['dato'] = pd.Timestamp.now(tz='UTC')
-            features.update({
+            
+            history_features = {
                 'købesum': None,
                 'prev_købesum': last_sale.get('købesum'),
                 'Vær.': last_sale.get('Vær.'),
                 'm2': last_sale.get('m2'),
                 'btype': last_sale.get('btype'),
+                'byggeaar': last_sale.get('byggeaar'),
                 'days_since_last_sale': (features['dato'] - last_sale['dato']).days,
                 'pris_pr_m2_prev': last_sale.get('pris_pr_m2'),
                 'pris_pr_m2_mean_postummer_prev': last_sale.get('pris_pr_m2_mean_365D_postnummer'),
                 'pris_pr_m2_mean_postnummer_btype_prev': last_sale.get('pris_pr_m2_mean_365D_postnummer_btype')
-            })
+            }
+            features.update(history_features)
 
-        postnummer = address_info.get('postnummer', 0)
-        region_features = self._get_region_from_postnummer(postnummer)
+        if overrides:
+            print(f"Applying user overrides: {overrides}")
+            features.update(overrides)
+
+        postnummer = int(features.get('postnummer', address_info.get('postnummer', 0)))
+        features['postnummer'] = postnummer
+        region_features = self.get_region_from_postnummer(postnummer)
         features.update(region_features)
 
-    def _get_region_from_postnummer(self, postnr: int) -> Dict[str, int]:
-        """
-        Maps postal code to one-hot encoded region features.
-        Returns a dictionary with all region columns set to 0 or 1.
-        """
-        # Initialize all regions to 0
+    def get_region_from_postnummer(self, postnr: int) -> Dict[str, int]:
         regions = {
             'område_Bornholm': 0,
             'område_Fyn og øer': 0,
@@ -366,7 +323,6 @@ class FeatureGenerator:
             'område_Øst- og Midtjylland': 0
         }
         
-        # Map postal code to region
         if 0 <= postnr <= 999:
             pass
         elif 1000 <= postnr <= 2999:
@@ -394,25 +350,22 @@ class FeatureGenerator:
         
         return regions
 
-    def _calculate_benchmark_features(self, features: Dict, postnummer_cohort: pd.DataFrame):
+    def calculate_benchmark_features(self, features: Dict, postnummer_cohort: pd.DataFrame):
         if postnummer_cohort.empty:
             features['pris_pr_m2_mean_365D_postnummer'] = np.nan
             features['pris_pr_m2_mean_365D_postnummer_btype'] = np.nan
             return
 
-        # Use the same time filtering as geospatial features
         max_data_date = postnummer_cohort['dato'].max()
         one_year_back_from_max = max_data_date - pd.Timedelta(days=365)
         
         postnummer_cohort_recent = postnummer_cohort[postnummer_cohort['dato'] >= one_year_back_from_max]
 
-        # --- Calculate for Postnummer ---
         if not postnummer_cohort_recent.empty:
             features['pris_pr_m2_mean_365D_postnummer'] = postnummer_cohort_recent['pris_pr_m2'].mean()
         else:
             features['pris_pr_m2_mean_365D_postnummer'] = np.nan
 
-        # --- Calculate for Btype-Specific ---
         btype = features.get('btype')
         if btype and not postnummer_cohort_recent.empty:
             btype_cohort = postnummer_cohort_recent[postnummer_cohort_recent['btype'] == btype]
@@ -423,10 +376,9 @@ class FeatureGenerator:
         else:
             features['pris_pr_m2_mean_365D_postnummer_btype'] = np.nan
 
-    def _calculate_geospatial_features(self, features: Dict, address_info: Dict):
+    def calculate_geospatial_features(self, features: Dict, address_info: Dict):
         if not all(k in address_info for k in ['y', 'x']) or pd.isna(address_info['y']) or pd.isna(address_info['x']):
             print("Warning: Missing or invalid coordinates for geospatial feature calculation.")
-            # Set all geospatial features to null/default values
             features.update({
                 'num_of_5_neighbors': 0,
                 'mean_of_5_neighbors_pris_pr_m2': np.nan,
@@ -439,18 +391,15 @@ class FeatureGenerator:
 
         target_coords_rad = np.radians([[address_info['y'], address_info['x']]])
         
-        # Get more neighbors to ensure we can find 5 recent ones after filtering
         distances, indices = self.spatial_index.query(target_coords_rad, k=500) 
         
         neighbor_indices = indices[0][1:]
         neighbors_df = self.main_df.iloc[neighbor_indices]
 
-        # Dynamically calculate the cutoff date as one year before the current date
         cutoff_date = pd.Timestamp.now(tz='UTC') - pd.DateOffset(years=1)
         
         neighbors_df_recent = neighbors_df[neighbors_df['dato'] >= cutoff_date]
         
-        # Take up to the 5 most recent neighbors
         neighbors_5 = neighbors_df_recent.head(5)
         
         features['num_of_5_neighbors'] = len(neighbors_5)
@@ -482,7 +431,7 @@ class FeatureGenerator:
             features['mean_of_5_samebtype_neighbors_pris_pr_m2'] = np.nan
             features['mean_of_5_samebtype_neighbors_pris'] = np.nan
 
-    def _calculate_historical_premiums(self, features: Dict, prop_history: pd.DataFrame, postnummer_cohort: pd.DataFrame):
+    def calculate_historical_premiums(self, features: Dict, prop_history: pd.DataFrame, postnummer_cohort: pd.DataFrame):
         post_rolling_mean = postnummer_cohort.sort_values('dato').set_index('dato')['pris_pr_m2'].rolling('365D', min_periods=30).mean()
 
         premiums_post = []
@@ -527,56 +476,55 @@ class FeatureGenerator:
             features['historical_premium_vs_postnummer_btype'] = 0
             features['historical_premium_vs_postnummer_btype_pct'] = 0
 
-    def _calculate_synthesized_features(self, features: Dict):
+    def calculate_synthesized_features(self, features: Dict):
         prop_m2 = features.get('m2', 0)
-        if not prop_m2:
+        if not prop_m2 or prop_m2 == 0:
             features['postnummer_pris_estimate'] = None
             features['postnummer_pris_premium_adjusted'] = None
-            features['postnummer_btype_pris_estimate'] = None  # Add this
-            features['postnummer_btype_pris_premium_adjusted'] = None  # Add this
-            features['days_since_dataset_start'] = None  # Add this
+            features['postnummer_btype_pris_estimate'] = None
+            features['postnummer_btype_pris_premium_adjusted'] = None
+            features['days_since_dataset_start'] = None
             return
 
-        # Existing calculations
         features['postnummer_pris_estimate'] = features.get('pris_pr_m2_mean_365D_postnummer', 0) * prop_m2
 
         adj_post_price_m2 = features.get('pris_pr_m2_mean_365D_postnummer', 0) + features.get('historical_premium_vs_postnummer', 0)
         features['postnummer_pris_premium_adjusted'] = adj_post_price_m2 * prop_m2
 
-        # NEW: Add the missing building type specific calculations
         features['postnummer_btype_pris_estimate'] = features.get('pris_pr_m2_mean_365D_postnummer_btype', 0) * prop_m2
         
-        # Calculate building type premium adjusted price
         adj_btype_price_m2 = features.get('pris_pr_m2_mean_365D_postnummer_btype', 0) + features.get('historical_premium_vs_postnummer_btype', 0)
         features['postnummer_btype_pris_premium_adjusted'] = adj_btype_price_m2 * prop_m2
 
-    def generate_for_address(self, full_address_query: str) -> Optional[Dict[str, Any]]:
-        """
-        The main public method to generate a complete feature vector for a single address.
-        """
+    def generate_for_address(self, full_address_query: str, overrides: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         print(f"\n--- Starting feature generation for: {full_address_query} ---")
         
-        address_info = self._get_dawa_data(full_address_query)
+        if overrides is None:
+            overrides = {}
+        
+        address_info = self.get_dawa_data(full_address_query)
         if not address_info:
             print("DAWA lookup failed")
             return None
         print(f"DAWA lookup successful: {address_info}")
 
-        bfe_nummer = self._get_bfe_number(address_info)
+        bfe_nummer = self.get_bfe_number(address_info)
         if not bfe_nummer:
             print("Could not get BFE number - property may be new")
             bfe_nummer = -1
 
         print(f"BFE number retrieved: {bfe_nummer}")
 
-        feature_vector = self._calculate_all_features(address_info, bfe_nummer)
+        feature_vector = self.calculate_all_features(address_info, bfe_nummer, overrides)
+        
+        feature_vector['x'] = address_info.get('x')
+        feature_vector['y'] = address_info.get('y')
+        feature_vector['full_address'] = address_info.get('full_address')
+
         print("--- Feature generation complete ---")
         return feature_vector
 
-    def _load_and_prepare_data(self, data_path: str) -> pd.DataFrame:
-        """
-        Loads the historical sales data from a CSV file into a pandas DataFrame.
-        """
+    def load_and_prepare_data(self, data_path: str) -> pd.DataFrame:
         print(f"Loading data from {data_path}...")
         dtype_map = {
             'bfe_nummer': 'int64',
@@ -598,42 +546,32 @@ class FeatureGenerator:
         print("Data loaded and prepared.")
         return df
 
-    def _build_spatial_index(self) -> BallTree:
-        """
-        Constructs a BallTree spatial index for efficient nearest-neighbor searches.
-        """
+    def build_spatial_index(self) -> BallTree:
         print("Building spatial index...")
         coords_radians = np.radians(self.main_df[['y', 'x']].values)
         tree = BallTree(coords_radians, metric='haversine')
         print("Spatial index built successfully.")
         return tree
 
-    def _calculate_all_features(self, address_info: Dict[str, Any], bfe_nummer: int) -> Dict[str, Any]:
-        """
-        Calculates all features for the property.
-        """
+    def calculate_all_features(self, address_info: Dict[str, Any], bfe_nummer: int, overrides: Dict[str, Any]) -> Dict[str, Any]:
         features = {}
 
-        # Get property history
         if bfe_nummer != -1:
             prop_history = self.main_df[self.main_df['bfe_nummer'] == bfe_nummer].sort_values('dato').copy()
         else:
             prop_history = pd.DataFrame()
         
-        # Define cohorts
-        postnummer_cohort = self.main_df[self.main_df['postnummer'] == address_info['postnummer']].copy()
-        features['postnummer'] = address_info['postnummer']
+        self.calculate_core_features(features, prop_history, address_info, overrides)
         
-        # Calculate all feature categories
-        self._calculate_core_features(features, prop_history, address_info)
-        self._calculate_benchmark_features(features, postnummer_cohort)
-        self._calculate_geospatial_features(features, address_info)
+        postnummer_for_cohort = int(features.get('postnummer', address_info['postnummer']))
+        postnummer_cohort = self.main_df[self.main_df['postnummer'] == postnummer_for_cohort].copy()
         
-        # Only calculate historical premiums if we have sales history
+        self.calculate_benchmark_features(features, postnummer_cohort)
+        self.calculate_geospatial_features(features, address_info)
+        
         if not prop_history.empty:
-            self._calculate_historical_premiums(features, prop_history, postnummer_cohort)
+            self.calculate_historical_premiums(features, prop_history, postnummer_cohort)
         else:
-            # Set premium features to 0 for new properties
             features.update({
                 'historical_premium_vs_postnummer': 0,
                 'historical_premium_vs_postnummer_pct': 0,
@@ -641,22 +579,19 @@ class FeatureGenerator:
                 'historical_premium_vs_postnummer_btype_pct': 0
             })
         
-        self._calculate_synthesized_features(features)
+        self.calculate_synthesized_features(features)
         
         return features
 
     def get_sales_history_for_address(self, full_address_query: str) -> Optional[list]:
-        """
-        Retrieves the formatted sales history for a specific address from the loaded data.
-        """
         print(f"Looking up sales history for: {full_address_query}")
 
-        address_info = self._get_dawa_data(full_address_query)
+        address_info = self.get_dawa_data(full_address_query)
         if not address_info:
             print("DAWA lookup failed for history.")
             return None
 
-        bfe_nummer = self._get_bfe_number(address_info)
+        bfe_nummer = self.get_bfe_number(address_info)
         if not bfe_nummer:
             print("Could not find BFE number for history.")
             return None
@@ -680,8 +615,6 @@ class FeatureGenerator:
         
         return sales_history
 
-
-# --- Example Usage ---
 if __name__ == '__main__':
     DATA_FILE_PATH = 'dataexplor/cleaned_data_harshtesttest4.csv'
 
@@ -700,14 +633,12 @@ if __name__ == '__main__':
             print("\nGenerated Features:")
             for key, value in features.items():
                 print(f"  {key}: {value}")
-
-        test_address = "Kronprinsensgade 57, st., 6700 Esbjerg"
         
-        features = feature_service.generate_for_address(test_address)
+        print("\n--- Testing with override ---")
+        overrides = {"m2": 200, "btype": "Ejerlejlighed"}
+        features_overridden = feature_service.generate_for_address(test_address, overrides=overrides)
 
-        if features:
-            print("\nGenerated Features:")
-            for key, value in features.items():
-                print(f"  {key}: {value}")        
-        else:
-            print(f"\nCould not generate features for '{test_address}'. Check logs for details.")
+        if features_overridden:
+            print("\nGenerated Features with Overrides:")
+            for key, value in features_overridden.items():
+                print(f"  {key}: {value}")

@@ -1,4 +1,4 @@
-const API_BASE_URL = '/api'; // Your backend URL
+const API_BASE_URL = '/api';
 
 async function fetchFromBackend(endpoint, options) {
      console.log(`Fetching from backend: ${API_BASE_URL}/${endpoint}`, options);
@@ -9,20 +9,17 @@ async function fetchFromBackend(endpoint, options) {
      return res.json();
 }
 
-export async function getBuildingDetails(buildingId, address) {
-    // Now uses the scrape service
+export async function getBuildingDetails(address, overrides = {}) {
     try {
         const data = await fetchFromBackend('scrape/building-info', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ buildingId, address })
+            body: JSON.stringify({ address, ...overrides })
         });
-      console.log(`Building Info: ${JSON.stringify(data)}`);
-
+        console.log(`Building Info: ${JSON.stringify(data)}`);
         return data;
     } catch (error) {
         console.error('Error fetching building details:', error);
-        // Fallback to mock data if API fails
         return {
             address: address,
             sqm: 120, 
@@ -30,8 +27,7 @@ export async function getBuildingDetails(buildingId, address) {
             city: 'København',
             rooms: 4, 
             year: 1999, 
-            houseType: 'Apartment',
-            region: 'Østerbro',
+            buildingType: 'Apartment',
             salesHistory: [
               { date: '2022-03-10', price: 7500000 },
               { date: '2018-07-22', price: 6200000 },
@@ -41,7 +37,6 @@ export async function getBuildingDetails(buildingId, address) {
 }
 
 export async function getPropertyHistory(address, zip) {
-    // New function for property history
     try {
         const data = await fetchFromBackend('scrape/property-history', {
             method: 'POST',
@@ -61,6 +56,6 @@ export const estimatePrice = async (propertyData) => {
     return fetchFromBackend('predict', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(propertyData)  // Send all the scraper data
+        body: JSON.stringify(propertyData)
     });
 };

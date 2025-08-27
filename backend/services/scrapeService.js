@@ -3,27 +3,24 @@ const axios = require('axios');
 const SCRAPER_SERVICE_URL = process.env.SCRAPER_SERVICE_URL || 'http://localhost:9000';
 
 const getBuildingInfo = async (req, res) => {
-  const { address, buildingId } = req.body;
-
   try {
-    console.log(`Requesting building info from scraper service for: ${address}`);
+    console.log(`Requesting building info from scraper service for: ${req.body.address}`);
     
-    // Call your scraping2 service instead of mock data
-    const response = await axios.post(`${SCRAPER_SERVICE_URL}/scrape/building-info`, {
-      address: address,
-      buildingId: buildingId
-    }, {
-      timeout: 30000 // 30 second timeout
-    });
-    console.log(response.data)
+    const response = await axios.post(`${SCRAPER_SERVICE_URL}/scrape/building-info`, 
+      req.body,
+      {
+        timeout: 30000 
+      }
+    );
+    
+    console.log(response.data);
     res.json(response.data);
 
   } catch (error) {
     console.error("Error calling scraper service:", error.message);
     
-    // Fallback to mock data if scraper service fails
     const mockData = {
-      address: address,
+      address: req.body.address,
       sqm: Math.floor(Math.random() * 200) + 50,
       rooms: Math.floor(Math.random() * 6) + 2,
       year: Math.floor(Math.random() * 50) + 1970,
@@ -49,7 +46,6 @@ const getPropertyHistory = async (req, res) => {
   try {
     console.log(`Requesting property history from scraper service for: ${address}`);
     
-    // You can add a property history endpoint to your scraping2 service
     const response = await axios.post(`${SCRAPER_SERVICE_URL}/scrape/property-history`, {
       address: address,
       zip: zip
@@ -62,7 +58,6 @@ const getPropertyHistory = async (req, res) => {
   } catch (error) {
     console.error("Error calling scraper service for property history:", error.message);
     
-    // Fallback mock data
     const mockHistory = {
       address: address,
       zip: zip,
