@@ -17,10 +17,7 @@ model_package = None
 DynamicPredictionInput = None
 
 def create_feature_mapping():
-    """
-    Creates a mapping from incoming feature names to model feature names.
-    This handles the naming differences between FeatureGenerator and trained model.
-    """
+   
     mapping = {}
     
     direct_features = [
@@ -69,9 +66,7 @@ def create_feature_mapping():
 
 @app.on_event("startup")
 def load_model():
-    """
-    Load the model package from disk when the application starts.
-    """
+    
     global model_package, DynamicPredictionInput
     
     if not os.path.exists(MODEL_PKL_PATH):
@@ -123,9 +118,7 @@ def get_model_info():
 
 @app.post("/predict/")
 async def predict(request: Request):
-    """
-    Receives property data and returns a prediction using XGBoost model.
-    """
+    
     if not model_package or not DynamicPredictionInput:
         raise HTTPException(status_code=503, detail="Model is not loaded or initialized properly")
 

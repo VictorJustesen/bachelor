@@ -15,7 +15,7 @@ const Free = forwardRef(({ map }, ref) => {
     handleLocationSelect
   }));
 
-  const neighborPriceCap = 9743;
+  const neighborPriceCap = 4411;
 
   const handleLocationSelect = (result) => {
     const [lng, lat] = result.center;
