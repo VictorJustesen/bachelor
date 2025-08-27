@@ -8,13 +8,10 @@ import logging
 import numpy as np
 import xgboost as xgb
 
-# --- Configuration ---
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'best_model')
 MODEL_NAME = 'finaltest'
 MODEL_PKL_PATH = os.path.join(MODEL_DIR, f'{MODEL_NAME}.pkl')
 MODEL_JSON_PATH = os.path.join(MODEL_DIR, f'{MODEL_NAME}_xgboost.json')
-
-# --- FastAPI App ---
 app = FastAPI(redirect_slashes=False)
 model_package = None
 DynamicPredictionInput = None
@@ -26,7 +23,6 @@ def create_feature_mapping():
     """
     mapping = {}
     
-    # Direct mappings for most features
     direct_features = [
         'index', 'prev_købesum', 'Vær.', 'm2', 'byggeaar', 
         'pris_pr_m2_mean_365D_postnummer', 'pris_pr_m2_mean_365D_postnummer_btype',
@@ -191,7 +187,7 @@ async def predict(request: Request):
         print(f"Mapped {mapped_features} features out of {len(feature_columns)} total")
         
         if mapped_features > 0:
-            print(f"\n🔄 Feature mappings (showing first 15):")
+            print(f"\n Feature mappings (showing first 15):")
             for log_entry in translation_log[:15]:
                 print(f"   {log_entry}")
             if len(translation_log) > 15:
@@ -244,7 +240,7 @@ async def predict(request: Request):
         
         predicted_price = max(100000, predicted_price)
         
-        print(f"✅ Prediction: {predicted_price:,.0f} DKK")
+        print(f" Prediction: {predicted_price:,.0f} DKK")
         
         return {
             "prediction": predicted_price,

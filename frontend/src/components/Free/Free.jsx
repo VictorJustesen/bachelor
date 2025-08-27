@@ -84,7 +84,6 @@ const Free = forwardRef(({ map }, ref) => {
         buildingType: selectedData.buildingType
       };
 
-      console.log('🔄 Re-fetching features with user overrides:', overrides);
       const freshFeatures = await getBuildingDetails(selectedData.address, overrides);
       
       const finalConsistentData = {
@@ -99,13 +98,11 @@ const Free = forwardRef(({ map }, ref) => {
   
       setSelectedData(finalConsistentData);
   
-      console.log('🚀 Sending FINAL CONSISTENT data to prediction service:', finalConsistentData);
       const estimate = await estimatePrice(finalConsistentData);
       setEstimatedPrice(estimate);
   
     } catch (error)
      {
-      console.error('❌ Error estimating price:', error);
       alert(`Fejl ved prisberegning: ${error.message}`);
     } finally {
       setIsLoading(false);
